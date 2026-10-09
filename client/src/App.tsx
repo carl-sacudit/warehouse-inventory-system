@@ -17,6 +17,7 @@ import StatCard from "./components/StatCard";
 import ProductsTable from "./components/ProductsTable";
 import ProductModal from "./components/ProductModal";
 import Login from "./components/Login";
+import StockMovements from "./components/StockMovements";
 
 import { authService, type AuthUser } from "./services/authService";
 import {
@@ -53,10 +54,12 @@ function App() {
   const [notice, setNotice] = useState("");
 
   const canManageProducts =
-  user?.role === "ADMIN" ||
-  user?.role === "WAREHOUSE_MANAGER";
+    user?.role === "ADMIN" ||
+    user?.role === "WAREHOUSE_MANAGER";
 
-const canDeleteProducts = user?.role === "ADMIN";
+  const canDeleteProducts = user?.role === "ADMIN";
+
+  const canManageStock = canManageProducts;
 
   // Restore the authenticated session when the app starts.
   useEffect(() => {
@@ -87,7 +90,7 @@ const canDeleteProducts = user?.role === "ADMIN";
     };
   }, []);
 
-  // Load products only after authentication has been checked.
+  // Load products after authentication has been checked.
   const loadProducts = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
       setRefreshing(true);
@@ -112,17 +115,16 @@ const canDeleteProducts = user?.role === "ADMIN";
     }
   }, []);
 
-useEffect(() => {
-  if (authLoading || !user) return;
+  useEffect(() => {
+    if (authLoading || !user) return;
 
-  const timer = setTimeout(() => {
-    void loadProducts();
-  }, 0);
+    const timer = setTimeout(() => {
+      void loadProducts();
+    }, 0);
 
-  return () => clearTimeout(timer);
-}, [user, authLoading, loadProducts]);
+    return () => clearTimeout(timer);
+  }, [user, authLoading, loadProducts]);
 
-  // All hooks remain above the conditional returns.
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -167,120 +169,125 @@ useEffect(() => {
       maximumFractionDigits: 2,
     }).format(value);
 
-const openCreateModal = () => {
-  if (!canManageProducts) {
-    setError("You do not have permission to create products.");
-    return;
-  }
-
-  setError("");
-  setSelectedProduct(null);
-  setIsModalOpen(true);
-};
-
-const openEditModal = (product: Product) => {
-  if (!canManageProducts) {
-    setError("You do not have permission to edit products.");
-    return;
-  }
-
-  setError("");
-  setSelectedProduct(product);
-  setIsModalOpen(true);
-};
-
- const closeModal = () => {
-  setIsModalOpen(false);
-  setSelectedProduct(null);
-};
-
-const handleSaveProduct = async (data: ProductInput) => {
-  if (!canManageProducts) {
-    setError("You do not have permission to modify products.");
-    return;
-  }
-
-  try {
-    setError("");
-
-    if (selectedProduct) {
-      await updateProduct(selectedProduct.id, data);
-      setNotice("Product updated successfully.");
-    } else {
-      await createProduct(data);
-      setNotice("Product created successfully.");
+  const openCreateModal = () => {
+    if (!canManageProducts) {
+      setError("You do not have permission to create products.");
+      return;
     }
 
-    closeModal();
-    await loadProducts(true);
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : "Unable to save the product."
-    );
-  }
-};
+    setError("");
+    setSelectedProduct(null);
+    setIsModalOpen(true);
+  };
 
+  const openEditModal = (product: Product) => {
+    if (!canManageProducts) {
+      setError("You do not have permission to edit products.");
+      return;
+    }
+
+    setError("");
+    setSelectedProduct(product);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const handleSaveProduct = async (data: ProductInput) => {
+    if (!canManageProducts) {
+      setError("You do not have permission to modify products.");
+      return;
+    }
+
+    try {
+      setError("");
+
+      if (selectedProduct) {
+        await updateProduct(selectedProduct.id, data);
+        setNotice("Product updated successfully.");
+      } else {
+        await createProduct(data);
+        setNotice("Product created successfully.");
+      }
+
+      closeModal();
+      await loadProducts(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save the product."
+      );
+    }
+  };
 
   const handleDeleteProduct = async (product: Product) => {
-  if (!canDeleteProducts) {
-    setError("Only administrators can delete products.");
-    return;
-  }
+    if (!canDeleteProducts) {
+      setError("Only administrators can delete products.");
+      return;
+    }
 
-  const confirmed = window.confirm(
-    `Are you sure you want to delete "${product.name}"?`
-  );
-
-  if (!confirmed) return;
-
-  setError("");
-  setNotice("");
-
-  try {
-    await deleteProduct(product.id);
-    setNotice("Product deleted successfully.");
-    await loadProducts(true);
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : "Unable to delete the product."
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${product.name}"?`
     );
-  }
-};
+
+    if (!confirmed) return;
+
+    setError("");
+    setNotice("");
+
+    try {
+      await deleteProduct(product.id);
+      setNotice("Product deleted successfully.");
+      await loadProducts(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to delete the product."
+      );
+    }
+  };
 
   const handleNavigate = (page: string) => {
     setActivePage(page);
     setSearchQuery("");
+    setError("");
+    setNotice("");
+    setSidebarOpen(false);
 
-    if (page === "Dashboard" || page === "Products") {
-      setNotice("");
-      return;
+    if (
+      page !== "Dashboard" &&
+      page !== "Products" &&
+      page !== "Stock Movements"
+    ) {
+      setNotice(`${page} module is coming soon.`);
     }
-
-    setNotice(`${page} module is coming soon.`);
   };
 
-const handleLogout = async () => {
-  try {
-    await authService.logout();
-  } catch (error) {
-    console.error("Logout failed:", error);
-  } finally {
-    setUser(null);
-    setProducts([]);
-    setLoading(false);
-    setRefreshing(false);
-    setError("");
-    setSearchQuery("");
-    setSelectedProduct(null);
-    setIsModalOpen(false);
-  }
-};
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setUser(null);
+      setProducts([]);
+      setLoading(false);
+      setRefreshing(false);
+      setError("");
+      setSearchQuery("");
+      setSelectedProduct(null);
+      setIsModalOpen(false);
+      setActivePage("Dashboard");
+      setNotice("");
+    }
+  };
 
-  // Conditional rendering happens after every hook.
+  // Conditional rendering happens after all hooks.
   if (authLoading) {
     return (
       <div className="auth-loading-screen">
@@ -293,6 +300,8 @@ const handleLogout = async () => {
   if (!user) {
     return <Login onAuthenticated={setUser} />;
   }
+
+  const isStockMovementsPage = activePage === "Stock Movements";
 
   return (
     <div className="app-shell">
@@ -354,128 +363,136 @@ const handleLogout = async () => {
         </header>
 
         <div className="page-content">
-          <section className="page-heading">
-            <div className="page-heading-copy">
-              <div className="eyebrow">
-                <LayoutDashboard size={15} />
-                WAREHOUSE OVERVIEW
-              </div>
+          {isStockMovementsPage ? (
+            <StockMovements canManageStock={canManageStock} />
+          ) : (
+            <>
+              <section className="page-heading">
+                <div className="page-heading-copy">
+                  <div className="eyebrow">
+                    <LayoutDashboard size={15} />
+                    WAREHOUSE OVERVIEW
+                  </div>
 
-              <h1>
-                {activePage === "Dashboard"
-                  ? "Inventory Dashboard"
-                  : activePage}
-              </h1>
+                  <h1>
+                    {activePage === "Dashboard"
+                      ? "Inventory Dashboard"
+                      : activePage}
+                  </h1>
 
-              <p>
-                Monitor your stock, track inventory levels, and
-                manage warehouse products in one place.
-              </p>
-            </div>
+                  <p>
+                    Monitor your stock, track inventory levels, and
+                    manage warehouse products in one place.
+                  </p>
+                </div>
 
-            <div className="page-heading-actions">
-              <button
-                type="button"
-                className="button-secondary refresh-button"
-                disabled={refreshing || loading}
-                onClick={() => void loadProducts(true)}
-              >
-                <RefreshCw
-                  size={17}
-                  className={refreshing ? "refresh-spinning" : ""}
+                <div className="page-heading-actions">
+                  <button
+                    type="button"
+                    className="button-secondary refresh-button"
+                    disabled={refreshing || loading}
+                    onClick={() => void loadProducts(true)}
+                  >
+                    <RefreshCw
+                      size={17}
+                      className={refreshing ? "refresh-spinning" : ""}
+                    />
+                    Refresh
+                  </button>
+
+                  {canManageProducts && (
+                    <button
+                      type="button"
+                      className="button-primary"
+                      onClick={openCreateModal}
+                    >
+                      <Plus size={18} />
+                      Add Product
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              {error && (
+                <div className="app-alert app-alert-error" role="alert">
+                  <AlertTriangle size={19} />
+
+                  <div>
+                    <strong>Something went wrong</strong>
+                    <p>{error}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void loadProducts(true)}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {notice && (
+                <div className="app-alert app-alert-info" role="status">
+                  <span>{notice}</span>
+
+                  <button
+                    type="button"
+                    aria-label="Dismiss message"
+                    onClick={() => setNotice("")}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
+              <section className="stats-grid">
+                <StatCard
+                  title="Total Products"
+                  value={loading ? "—" : formatNumber(totalProducts)}
+                  subtitle="Registered inventory items"
+                  icon={Package}
+                  color="blue"
                 />
-                Refresh
-              </button>
 
-{canManageProducts && (
-  <button
-    type="button"
-    className="button-primary"
-    onClick={openCreateModal}
-  >
-    <Plus size={18} />
-    Add Product
-  </button>
-)}
-            </div>
-          </section>
+                <StatCard
+                  title="Total Units"
+                  value={loading ? "—" : formatNumber(totalUnits)}
+                  subtitle="Units currently in stock"
+                  icon={Boxes}
+                  color="green"
+                />
 
-          {error && (
-            <div className="app-alert app-alert-error" role="alert">
-              <AlertTriangle size={19} />
+                <StatCard
+                  title="Inventory Value"
+                  value={loading ? "—" : formatCurrency(inventoryValue)}
+                  subtitle="Estimated value of current stock"
+                  icon={Wallet}
+                  color="purple"
+                />
 
-              <div>
-                <strong>Something went wrong</strong>
-                <p>{error}</p>
-              </div>
+                <StatCard
+                  title="Low Stock"
+                  value={loading ? "—" : formatNumber(lowStockCount)}
+                  subtitle="Items at or below reorder level"
+                  icon={AlertTriangle}
+                  color="orange"
+                />
+              </section>
 
-              <button
-                type="button"
-                onClick={() => void loadProducts(true)}
-              >
-                Retry
-              </button>
-            </div>
+              <ProductsTable
+                products={filteredProducts}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onEdit={openEditModal}
+                onDelete={(product) =>
+                  void handleDeleteProduct(product)
+                }
+                loading={loading}
+                canEdit={canManageProducts}
+                canDelete={canDeleteProducts}
+              />
+            </>
           )}
-
-          {notice && (
-            <div className="app-alert app-alert-info" role="status">
-              <span>{notice}</span>
-
-              <button
-                type="button"
-                aria-label="Dismiss message"
-                onClick={() => setNotice("")}
-              >
-                ×
-              </button>
-            </div>
-          )}
-
-          <section className="stats-grid">
-            <StatCard
-              title="Total Products"
-              value={loading ? "—" : formatNumber(totalProducts)}
-              subtitle="Registered inventory items"
-              icon={Package}
-              color="blue"
-            />
-
-            <StatCard
-              title="Total Units"
-              value={loading ? "—" : formatNumber(totalUnits)}
-              subtitle="Units currently in stock"
-              icon={Boxes}
-              color="green"
-            />
-
-            <StatCard
-              title="Inventory Value"
-              value={loading ? "—" : formatCurrency(inventoryValue)}
-              subtitle="Estimated value of current stock"
-              icon={Wallet}
-              color="purple"
-            />
-
-            <StatCard
-              title="Low Stock"
-              value={loading ? "—" : formatNumber(lowStockCount)}
-              subtitle="Items at or below reorder level"
-              icon={AlertTriangle}
-              color="orange"
-            />
-          </section>
-
-<ProductsTable
-  products={filteredProducts}
-  searchQuery={searchQuery}
-  onSearchChange={setSearchQuery}
-  onEdit={openEditModal}
-  onDelete={(product) => void handleDeleteProduct(product)}
-  loading={loading}
-  canEdit={canManageProducts}
-  canDelete={canDeleteProducts}
-/>
 
           <footer className="app-footer">
             <span>© {new Date().getFullYear()} StockFlow</span>
