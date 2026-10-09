@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import pool from "./config/database.js";
 import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import stockMovementRoutes from "./routes/stockMovement.routes.js";
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
-
+app.use("/api/stock-movements", stockMovementRoutes);
 // API health check
 app.get("/api/health", (_req, res) => {
   res.json({
