@@ -445,3 +445,208 @@ flex-direction: column;
 width: 100%;
 }
 }
+
+/* =========================================
+   STOCK MOVEMENT FILTERS
+========================================= */
+
+.sm-filters {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(145px, 1fr)
+    minmax(145px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  padding: 18px 22px;
+  border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.14));
+  border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.14));
+}
+
+.sm-filter-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sm-filter-field > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sm-filter-field select,
+.sm-filter-field input,
+.sm-page-size select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface-color, #111827);
+  color: var(--text-primary, #e2e8f0);
+  font: inherit;
+  font-size: 13px;
+  color-scheme: dark;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sm-filter-field select:focus,
+.sm-filter-field input:focus,
+.sm-page-size select:focus {
+  border-color: var(--primary-color, #6366f1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.sm-reset-filters {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.sm-reset-filters:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-primary, #f8fafc);
+}
+
+/* =========================================
+   PAGINATION
+========================================= */
+
+.sm-pagination-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px 22px;
+}
+
+.sm-pagination-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+}
+
+.sm-pagination-info strong {
+  color: var(--text-primary, #e2e8f0);
+  font-weight: 700;
+}
+
+.sm-total-records {
+  margin-left: 5px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.sm-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sm-page-size {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+}
+
+.sm-page-size select {
+  width: 64px;
+  height: 34px;
+  padding: 0 7px;
+}
+
+.sm-page-indicator {
+  margin: 0 4px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sm-page-button {
+  display: inline-flex;
+  width: 35px;
+  height: 35px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, #e2e8f0);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.sm-page-button:hover:not(:disabled) {
+  border-color: var(--primary-color, #6366f1);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.sm-page-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* =========================================
+   RESPONSIVE FILTERS AND PAGINATION
+========================================= */
+
+@media (max-width: 900px) {
+  .sm-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sm-reset-filters {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .sm-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .sm-pagination-footer {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .sm-pagination-info {
+    width: 100%;
+  }
+
+  .sm-pagination-controls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 7px;
+  }
+
+  .sm-total-records {
+    width: 100%;
+    margin: 4px 0 0;
+  }
+
+  .sm-page-indicator {
+    margin: 0;
+  }
+}
