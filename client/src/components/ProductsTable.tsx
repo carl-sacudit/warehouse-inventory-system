@@ -1,3 +1,4 @@
+
 import {
   Search,
   Package,
@@ -14,6 +15,8 @@ interface ProductsTableProps {
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   loading: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
 function ProductsTable({
@@ -23,6 +26,8 @@ function ProductsTable({
   onEdit,
   onDelete,
   loading,
+  canEdit,
+  canDelete,
 }: ProductsTableProps) {
   const formatCurrency = (value: number | string) => {
     return new Intl.NumberFormat("en-PH", {
@@ -52,6 +57,8 @@ function ProductsTable({
       className: "stock-status-in",
     };
   };
+
+  const hasActions = canEdit || canDelete;
 
   return (
     <section className="products-panel">
@@ -98,21 +105,23 @@ function ProductsTable({
               <th>Quantity</th>
               <th>Unit Price</th>
               <th>Status</th>
-              <th className="actions-heading">Actions</th>
+              {hasActions && (
+                <th className="actions-heading">Actions</th>
+              )}
             </tr>
           </thead>
 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="table-message">
+                <td colSpan={hasActions ? 7 : 6} className="table-message">
                   <span className="loading-spinner" />
                   Loading inventory...
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={7} className="table-message">
+                <td colSpan={hasActions ? 7 : 6} className="table-message">
                   <div className="empty-products">
                     <Package size={32} />
                     <strong>No products found</strong>
@@ -178,29 +187,35 @@ function ProductsTable({
                       </span>
                     </td>
 
-                    <td>
-                      <div className="product-actions">
-                        <button
-                          type="button"
-                          className="table-action-button edit-action"
-                          title={`Edit ${product.name}`}
-                          aria-label={`Edit ${product.name}`}
-                          onClick={() => onEdit(product)}
-                        >
-                          <Pencil size={16} />
-                        </button>
+                    {hasActions && (
+                      <td>
+                        <div className="product-actions">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="table-action-button edit-action"
+                              title={`Edit ${product.name}`}
+                              aria-label={`Edit ${product.name}`}
+                              onClick={() => onEdit(product)}
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          )}
 
-                        <button
-                          type="button"
-                          className="table-action-button delete-action"
-                          title={`Delete ${product.name}`}
-                          aria-label={`Delete ${product.name}`}
-                          onClick={() => onDelete(product)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="table-action-button delete-action"
+                              title={`Delete ${product.name}`}
+                              aria-label={`Delete ${product.name}`}
+                              onClick={() => onDelete(product)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })

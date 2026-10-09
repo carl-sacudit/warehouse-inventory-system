@@ -52,6 +52,12 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
+  const canManageProducts =
+  user?.role === "ADMIN" ||
+  user?.role === "WAREHOUSE_MANAGER";
+
+const canDeleteProducts = user?.role === "ADMIN";
+
   // Restore the authenticated session when the app starts.
   useEffect(() => {
     let cancelled = false;
@@ -161,66 +167,89 @@ useEffect(() => {
       maximumFractionDigits: 2,
     }).format(value);
 
-  const openCreateModal = () => {
-    setSelectedProduct(null);
-    setIsModalOpen(true);
-  };
+const openCreateModal = () => {
+  if (!canManageProducts) {
+    setError("You do not have permission to create products.");
+    return;
+  }
 
-  const openEditModal = (product: Product) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
+  setError("");
+  setSelectedProduct(null);
+  setIsModalOpen(true);
+};
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedProduct(null);
-  };
+const openEditModal = (product: Product) => {
+  if (!canManageProducts) {
+    setError("You do not have permission to edit products.");
+    return;
+  }
 
-  const handleSaveProduct = async (data: ProductInput) => {
-    try {
-      setError("");
+  setError("");
+  setSelectedProduct(product);
+  setIsModalOpen(true);
+};
 
-      if (selectedProduct) {
-        await updateProduct(selectedProduct.id, data);
-        setNotice("Product updated successfully.");
-      } else {
-        await createProduct(data);
-        setNotice("Product created successfully.");
-      }
+ const closeModal = () => {
+  setIsModalOpen(false);
+  setSelectedProduct(null);
+};
 
-      closeModal();
-      await loadProducts(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save the product."
-      );
+const handleSaveProduct = async (data: ProductInput) => {
+  if (!canManageProducts) {
+    setError("You do not have permission to modify products.");
+    return;
+  }
+
+  try {
+    setError("");
+
+    if (selectedProduct) {
+      await updateProduct(selectedProduct.id, data);
+      setNotice("Product updated successfully.");
+    } else {
+      await createProduct(data);
+      setNotice("Product created successfully.");
     }
-  };
+
+    closeModal();
+    await loadProducts(true);
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to save the product."
+    );
+  }
+};
+
 
   const handleDeleteProduct = async (product: Product) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${product.name}"?`
+  if (!canDeleteProducts) {
+    setError("Only administrators can delete products.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete "${product.name}"?`
+  );
+
+  if (!confirmed) return;
+
+  setError("");
+  setNotice("");
+
+  try {
+    await deleteProduct(product.id);
+    setNotice("Product deleted successfully.");
+    await loadProducts(true);
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to delete the product."
     );
-
-    if (!confirmed) return;
-
-    setError("");
-    setNotice("");
-
-    try {
-      await deleteProduct(product.id);
-      setNotice("Product deleted successfully.");
-      await loadProducts(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete the product."
-      );
-    }
-  };
+  }
+};
 
   const handleNavigate = (page: string) => {
     setActivePage(page);
@@ -358,14 +387,16 @@ const handleLogout = async () => {
                 Refresh
               </button>
 
-              <button
-                type="button"
-                className="button-primary"
-                onClick={openCreateModal}
-              >
-                <Plus size={18} />
-                Add Product
-              </button>
+{canManageProducts && (
+  <button
+    type="button"
+    className="button-primary"
+    onClick={openCreateModal}
+  >
+    <Plus size={18} />
+    Add Product
+  </button>
+)}
             </div>
           </section>
 
@@ -435,14 +466,16 @@ const handleLogout = async () => {
             />
           </section>
 
-          <ProductsTable
-            products={filteredProducts}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onEdit={openEditModal}
-            onDelete={(product) => void handleDeleteProduct(product)}
-            loading={loading}
-          />
+<ProductsTable
+  products={filteredProducts}
+  searchQuery={searchQuery}
+  onSearchChange={setSearchQuery}
+  onEdit={openEditModal}
+  onDelete={(product) => void handleDeleteProduct(product)}
+  loading={loading}
+  canEdit={canManageProducts}
+  canDelete={canDeleteProducts}
+/>
 
           <footer className="app-footer">
             <span>© {new Date().getFullYear()} StockFlow</span>

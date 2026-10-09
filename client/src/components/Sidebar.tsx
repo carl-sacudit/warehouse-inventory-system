@@ -9,6 +9,7 @@ import {
   Warehouse,
   X,
   LogOut,
+  Users,
 } from "lucide-react";
 
 import type { AuthUser } from "../services/authService";
@@ -22,20 +23,75 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-const navigationItems = [
+interface NavigationItem {
+  label: string;
+  icon: typeof LayoutDashboard;
+  allowedRoles: AuthUser["role"][];
+}
+
+interface NavigationSection {
+  section: string;
+  items: NavigationItem[];
+}
+
+const ALL_ROLES: AuthUser["role"][] = [
+  "ADMIN",
+  "WAREHOUSE_MANAGER",
+  "INVENTORY_STAFF",
+];
+
+const MANAGEMENT_ROLES: AuthUser["role"][] = [
+  "ADMIN",
+  "WAREHOUSE_MANAGER",
+];
+
+const ADMIN_ROLES: AuthUser["role"][] = ["ADMIN"];
+
+const navigationItems: NavigationSection[] = [
   {
     section: "MAIN MENU",
     items: [
-      { label: "Dashboard", icon: LayoutDashboard },
-      { label: "Products", icon: Package },
-      { label: "Categories", icon: Tags },
-      { label: "Suppliers", icon: Truck },
-      { label: "Stock Movements", icon: ArrowLeftRight },
+      {
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        allowedRoles: ALL_ROLES,
+      },
+      {
+        label: "Products",
+        icon: Package,
+        allowedRoles: ALL_ROLES,
+      },
+      {
+        label: "Categories",
+        icon: Tags,
+        allowedRoles: ALL_ROLES,
+      },
+      {
+        label: "Suppliers",
+        icon: Truck,
+        allowedRoles: MANAGEMENT_ROLES,
+      },
+      {
+        label: "Stock Movements",
+        icon: ArrowLeftRight,
+        allowedRoles: ALL_ROLES,
+      },
+      {
+        label: "User Management",
+        icon: Users,
+        allowedRoles: ADMIN_ROLES,
+      },
     ],
   },
   {
     section: "PREFERENCES",
-    items: [{ label: "Settings", icon: Settings }],
+    items: [
+      {
+        label: "Settings",
+        icon: Settings,
+        allowedRoles: ALL_ROLES,
+      },
+    ],
   },
 ];
 
@@ -51,7 +107,10 @@ function getInitials(name: string): string {
 function formatRole(role: AuthUser["role"]): string {
   return role
     .split("_")
-    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .map(
+      (part) =>
+        part.charAt(0) + part.slice(1).toLowerCase()
+    )
     .join(" ");
 }
 
@@ -63,6 +122,15 @@ function Sidebar({
   user,
   onLogout,
 }: SidebarProps) {
+  const visibleSections = navigationItems
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) =>
+        item.allowedRoles.includes(user.role)
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
+
   return (
     <>
       {isOpen && (
@@ -97,6 +165,7 @@ function Sidebar({
 
         <div className="sidebar-workspace">
           <div className="workspace-avatar">SF</div>
+
           <div className="workspace-info">
             <strong>Main Warehouse</strong>
             <span>Workspace</span>
@@ -104,9 +173,14 @@ function Sidebar({
         </div>
 
         <nav className="sidebar-navigation">
-          {navigationItems.map((section) => (
-            <div className="sidebar-section" key={section.section}>
-              <p className="sidebar-section-title">{section.section}</p>
+          {visibleSections.map((section) => (
+            <div
+              className="sidebar-section"
+              key={section.section}
+            >
+              <p className="sidebar-section-title">
+                {section.section}
+              </p>
 
               <div className="sidebar-nav-items">
                 {section.items.map((item) => {
@@ -117,7 +191,9 @@ function Sidebar({
                     <button
                       key={item.label}
                       type="button"
-                      className={`sidebar-nav-item ${isActive ? "active" : ""}`}
+                      className={`sidebar-nav-item ${
+                        isActive ? "active" : ""
+                      }`}
                       onClick={() => {
                         onNavigate(item.label);
                         onClose();
@@ -143,7 +219,9 @@ function Sidebar({
           </div>
 
           <div className="sidebar-user-info">
-            <strong title={user.full_name}>{user.full_name}</strong>
+            <strong title={user.full_name}>
+              {user.full_name}
+            </strong>
             <span>{formatRole(user.role)}</span>
           </div>
 
