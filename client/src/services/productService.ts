@@ -37,13 +37,14 @@ async function request<T>(
   url: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
+const response = await fetch(url, {
+  ...options,
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+    ...options?.headers,
+  },
+});
 
   const result = await response.json();
 

@@ -1,13 +1,11 @@
 
 import type { Request, Response } from "express";
 import bcrypt from "bcrypt";
-import jwt, { type SignOptions } from "jsonwebtoken";
-import type { RowDataPacket } from "mysql2";
+import jwt from "jsonwebtoken";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
+
 import pool from "../config/database.js";
-import type {
-  AuthenticatedUser,
-  UserRole,
-} from "../middleware/auth.middleware.js";
+import type { AuthenticatedUser, UserRole } from "../middleware/auth.middleware.js";
 
 interface UserRow extends RowDataPacket {
   id: number;
@@ -20,6 +18,16 @@ interface UserRow extends RowDataPacket {
 
 const COOKIE_NAME = "stockflow_token";
 
+function cookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 60 * 60 * 1000,
+    path: "/",
+  };
+}
+
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
 
@@ -28,16 +36,6 @@ function getJwtSecret(): string {
   }
 
   return secret;
-}
-
-function cookieOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 60 * 60 * 1000,
-  };
 }
 
 export async function login(
@@ -73,10 +71,7 @@ export async function login(
 
     const user = rows[0];
 
-    if (
-      !user ||
-      !(await bcrypt.compare(password, user.password_hash))
-    ) {
+    if (!user || !user.is_active) {
       res.status(401).json({
         success: false,
         message: "Invalid email or password.",
@@ -84,16 +79,18 @@ export async function login(
       return;
     }
 
-    if (!user.is_active) {
-      res.status(403).json({
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+
+    if (!passwordMatches) {
+      res.status(401).json({
         success: false,
-        message: "This account has been disabled.",
+        message: "Invalid email or password.",
       });
       return;
     }
-
-    const expiresIn = (process.env.JWT_EXPIRES_IN ||
-      "1h") as SignOptions["expiresIn"];
 
     const token = jwt.sign(
       {
@@ -102,37 +99,37 @@ export async function login(
         role: user.role,
       },
       getJwtSecret(),
-      { expiresIn }
+      { expiresIn: "1h" }
     );
 
     res.cookie(COOKIE_NAME, token, cookieOptions());
 
-    const safeUser: AuthenticatedUser & { full_name: string } = {
-      id: user.id,
-      full_name: user.full_name,
-      email: user.email,
-      role: user.role,
-    };
-
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Login successful.",
-      data: { user: safeUser },
+      data: {
+        user: {
+          id: user.id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+        },
+      },
     });
   } catch (error) {
     console.error("Login failed:", error);
 
     res.status(500).json({
       success: false,
-      message: "Unable to log in. Please try again.",
+      message: "Unable to log in right now.",
     });
   }
 }
 
-export function logout(
+export async function logout(
   _req: Request,
   res: Response
-): void {
+): Promise<void> {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -140,20 +137,61 @@ export function logout(
     path: "/",
   });
 
-  res.json({
+  res.status(200).json({
     success: true,
     message: "Logged out successfully.",
   });
 }
 
-export function getCurrentUser(
+export async function getCurrentUser(
   _req: Request,
   res: Response
-): void {
-  const user = res.locals.user as AuthenticatedUser;
+): Promise<void> {
+  try {
+    const authenticatedUser = res.locals.user as AuthenticatedUser;
 
-  res.json({
-    success: true,
-    data: { user },
-  });
+    const [rows] = await pool.execute<UserRow[]>(
+      `SELECT id, full_name, email, password_hash, role, is_active
+       FROM users
+       WHERE id = ? AND is_active = TRUE
+       LIMIT 1`,
+      [authenticatedUser.id]
+    );
+
+    const user = rows[0];
+
+    if (!user) {
+      res.clearCookie(COOKIE_NAME, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      });
+
+      res.status(401).json({
+        success: false,
+        message: "Your account is unavailable. Please log in again.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Unable to retrieve current user:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to retrieve your account.",
+    });
+  }
 }

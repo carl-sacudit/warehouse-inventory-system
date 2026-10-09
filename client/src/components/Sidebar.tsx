@@ -1,3 +1,4 @@
+
 import {
   LayoutDashboard,
   Package,
@@ -7,71 +8,73 @@ import {
   Settings,
   Warehouse,
   X,
+  LogOut,
 } from "lucide-react";
+
+import type { AuthUser } from "../services/authService";
 
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   isOpen: boolean;
   onClose: () => void;
+  user: AuthUser;
+  onLogout: () => void;
 }
 
 const navigationItems = [
   {
     section: "MAIN MENU",
     items: [
-      {
-        label: "Dashboard",
-        icon: LayoutDashboard,
-      },
-      {
-        label: "Products",
-        icon: Package,
-      },
-      {
-        label: "Categories",
-        icon: Tags,
-      },
-      {
-        label: "Suppliers",
-        icon: Truck,
-      },
-      {
-        label: "Stock Movements",
-        icon: ArrowLeftRight,
-      },
+      { label: "Dashboard", icon: LayoutDashboard },
+      { label: "Products", icon: Package },
+      { label: "Categories", icon: Tags },
+      { label: "Suppliers", icon: Truck },
+      { label: "Stock Movements", icon: ArrowLeftRight },
     ],
   },
   {
     section: "PREFERENCES",
-    items: [
-      {
-        label: "Settings",
-        icon: Settings,
-      },
-    ],
+    items: [{ label: "Settings", icon: Settings }],
   },
 ];
+
+function getInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function formatRole(role: AuthUser["role"]): string {
+  return role
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
 
 function Sidebar({
   activePage,
   onNavigate,
   isOpen,
   onClose,
+  user,
+  onLogout,
 }: SidebarProps) {
   return (
     <>
       {isOpen && (
         <button
+          type="button"
           className="sidebar-overlay"
           aria-label="Close navigation"
           onClick={onClose}
         />
       )}
 
-      <aside
-        className={`sidebar ${isOpen ? "sidebar-open" : ""}`}
-      >
+      <aside className={`sidebar ${isOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
             <Warehouse size={24} strokeWidth={2.2} />
@@ -94,7 +97,6 @@ function Sidebar({
 
         <div className="sidebar-workspace">
           <div className="workspace-avatar">SF</div>
-
           <div className="workspace-info">
             <strong>Main Warehouse</strong>
             <span>Workspace</span>
@@ -103,13 +105,8 @@ function Sidebar({
 
         <nav className="sidebar-navigation">
           {navigationItems.map((section) => (
-            <div
-              className="sidebar-section"
-              key={section.section}
-            >
-              <p className="sidebar-section-title">
-                {section.section}
-              </p>
+            <div className="sidebar-section" key={section.section}>
+              <p className="sidebar-section-title">{section.section}</p>
 
               <div className="sidebar-nav-items">
                 {section.items.map((item) => {
@@ -120,16 +117,13 @@ function Sidebar({
                     <button
                       key={item.label}
                       type="button"
-                      className={`sidebar-nav-item ${
-                        isActive ? "active" : ""
-                      }`}
+                      className={`sidebar-nav-item ${isActive ? "active" : ""}`}
                       onClick={() => {
                         onNavigate(item.label);
                         onClose();
                       }}
                     >
                       <Icon size={19} strokeWidth={1.8} />
-
                       <span>{item.label}</span>
 
                       {isActive && (
@@ -144,12 +138,24 @@ function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-user-avatar">CB</div>
+          <div className="sidebar-user-avatar">
+            {getInitials(user.full_name)}
+          </div>
 
           <div className="sidebar-user-info">
-            <strong>Administrator</strong>
-            <span>Warehouse Manager</span>
+            <strong title={user.full_name}>{user.full_name}</strong>
+            <span>{formatRole(user.role)}</span>
           </div>
+
+          <button
+            type="button"
+            className="sidebar-logout-button"
+            onClick={onLogout}
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogOut size={17} />
+          </button>
 
           <span className="sidebar-status-dot" />
         </div>

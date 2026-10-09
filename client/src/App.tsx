@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Package,
@@ -15,7 +16,9 @@ import Sidebar from "./components/Sidebar";
 import StatCard from "./components/StatCard";
 import ProductsTable from "./components/ProductsTable";
 import ProductModal from "./components/ProductModal";
+import Login from "./components/Login";
 
+import { authService, type AuthUser } from "./services/authService";
 import {
   getProducts,
   createProduct,
@@ -31,8 +34,11 @@ import type {
 import "./App.css";
 
 function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,6 +52,36 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
+  // Restore the authenticated session when the app starts.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      try {
+        const currentUser = await authService.getCurrentUser();
+
+        if (!cancelled) {
+          setUser(currentUser);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load products only after authentication has been checked.
   const loadProducts = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
       setRefreshing(true);
@@ -71,37 +107,16 @@ function App() {
   }, []);
 
 useEffect(() => {
-  let cancelled = false;
+  if (authLoading || !user) return;
 
-  async function fetchInitialProducts() {
-    try {
-      const data = await getProducts();
+  const timer = setTimeout(() => {
+    void loadProducts();
+  }, 0);
 
-      if (!cancelled) {
-        setProducts(data);
-      }
-    } catch (err) {
-      if (!cancelled) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load inventory products."
-        );
-      }
-    } finally {
-      if (!cancelled) {
-        setLoading(false);
-      }
-    }
-  }
+  return () => clearTimeout(timer);
+}, [user, authLoading, loadProducts]);
 
-  void fetchInitialProducts();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
+  // All hooks remain above the conditional returns.
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -162,16 +177,26 @@ useEffect(() => {
   };
 
   const handleSaveProduct = async (data: ProductInput) => {
-    if (selectedProduct) {
-      await updateProduct(selectedProduct.id, data);
-      setNotice("Product updated successfully.");
-    } else {
-      await createProduct(data);
-      setNotice("Product created successfully.");
-    }
+    try {
+      setError("");
 
-    closeModal();
-    await loadProducts(true);
+      if (selectedProduct) {
+        await updateProduct(selectedProduct.id, data);
+        setNotice("Product updated successfully.");
+      } else {
+        await createProduct(data);
+        setNotice("Product created successfully.");
+      }
+
+      closeModal();
+      await loadProducts(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save the product."
+      );
+    }
   };
 
   const handleDeleteProduct = async (product: Product) => {
@@ -209,6 +234,37 @@ useEffect(() => {
     setNotice(`${page} module is coming soon.`);
   };
 
+const handleLogout = async () => {
+  try {
+    await authService.logout();
+  } catch (error) {
+    console.error("Logout failed:", error);
+  } finally {
+    setUser(null);
+    setProducts([]);
+    setLoading(false);
+    setRefreshing(false);
+    setError("");
+    setSearchQuery("");
+    setSelectedProduct(null);
+    setIsModalOpen(false);
+  }
+};
+
+  // Conditional rendering happens after every hook.
+  if (authLoading) {
+    return (
+      <div className="auth-loading-screen">
+        <div className="loading-spinner" />
+        <span>Restoring your StockFlow session...</span>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onAuthenticated={setUser} />;
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -216,6 +272,8 @@ useEffect(() => {
         onNavigate={handleNavigate}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        user={user}
+        onLogout={() => void handleLogout()}
       />
 
       <main className="main-content">
@@ -255,7 +313,14 @@ useEffect(() => {
               <Bell size={19} />
             </button>
 
-            <div className="topbar-avatar">CB</div>
+            <div className="topbar-avatar" title={user.full_name}>
+              {user.full_name
+                .trim()
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0]?.toUpperCase() ?? "")
+                .join("")}
+            </div>
           </div>
         </header>
 
@@ -380,9 +445,7 @@ useEffect(() => {
           />
 
           <footer className="app-footer">
-            <span>
-              © {new Date().getFullYear()} StockFlow
-            </span>
+            <span>© {new Date().getFullYear()} StockFlow</span>
             <span>Warehouse Inventory Management System</span>
           </footer>
         </div>

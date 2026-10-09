@@ -1474,3 +1474,32 @@ button {
     grid-column: auto;
   }
 }
+.sidebar-logout-button {
+  display: grid;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #aab6ce;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sidebar-logout-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.auth-loading-screen {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #68758b;
+  background: #f5f7fc;
+  font-size: 12px;
+}
+
