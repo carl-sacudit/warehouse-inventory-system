@@ -5,6 +5,7 @@ import {
   Tags,
   Truck,
   ArrowLeftRight,
+  ClipboardList,
   Settings,
   Warehouse,
   X,
@@ -70,6 +71,11 @@ const navigationItems: NavigationSection[] = [
         label: "Suppliers",
         icon: Truck,
         allowedRoles: MANAGEMENT_ROLES,
+      },
+      {
+        label: "Purchase Orders",
+        icon: ClipboardList,
+        allowedRoles: ALL_ROLES,
       },
       {
         label: "Stock Movements",

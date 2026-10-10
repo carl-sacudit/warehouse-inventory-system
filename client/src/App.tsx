@@ -19,18 +19,17 @@ import ProductModal from "./components/ProductModal";
 import Login from "./components/Login";
 import StockMovements from "./components/StockMovements";
 import Suppliers from "./components/Suppliers";
+import PurchaseOrders from "./components/PurchaseOrders";
 
 import { authService, type AuthUser } from "./services/authService";
+
 import {
   getProducts,
   createProduct,
   updateProduct,
   deleteProduct,
-} from "./services/productService";
-
-import type {
-  Product,
-  ProductInput,
+  type Product,
+  type ProductInput,
 } from "./services/productService";
 
 import "./App.css";
@@ -54,9 +53,10 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
+  // Role permissions
   const canManageSuppliers =
-  user?.role === "ADMIN" ||
-  user?.role === "WAREHOUSE_MANAGER";
+    user?.role === "ADMIN" ||
+    user?.role === "WAREHOUSE_MANAGER";
 
   const canDeleteSuppliers = user?.role === "ADMIN";
 
@@ -67,6 +67,11 @@ function App() {
   const canDeleteProducts = user?.role === "ADMIN";
 
   const canManageStock = canManageProducts;
+
+  // Purchase orders can be created and managed by administrators
+  // and warehouse managers. Receiving permissions are enforced
+  // separately by the backend for authorized users.
+  const canManagePurchaseOrders = canManageSuppliers;
 
   // Restore the authenticated session when the app starts.
   useEffect(() => {
@@ -161,20 +166,17 @@ function App() {
     0
   );
 
-  const lowStockCount = products.filter(
-    (product) =>
-      Number(product.quantity) <= Number(product.reorder_level)
-  ).length;
-
   const lowStockProducts = products
-  .filter(
-    (product) =>
-      Number(product.quantity) <= Number(product.reorder_level)
-  )
-  .sort(
-    (a, b) =>
-      Number(a.quantity) - Number(b.quantity)
-  );
+    .filter(
+      (product) =>
+        Number(product.quantity) <= Number(product.reorder_level)
+    )
+    .sort(
+      (a, b) =>
+        Number(a.quantity) - Number(b.quantity)
+    );
+
+  const lowStockCount = lowStockProducts.length;
 
   const formatNumber = (value: number) =>
     new Intl.NumberFormat("en-PH").format(value);
@@ -221,6 +223,7 @@ function App() {
 
     try {
       setError("");
+      setNotice("");
 
       if (selectedProduct) {
         await updateProduct(selectedProduct.id, data);
@@ -269,22 +272,25 @@ function App() {
     }
   };
 
-const handleNavigate = (page: string) => {
-  setActivePage(page);
-  setSearchQuery("");
-  setError("");
-  setNotice("");
-  setSidebarOpen(false);
+  const handleNavigate = (page: string) => {
+    setActivePage(page);
+    setSearchQuery("");
+    setError("");
+    setNotice("");
+    setSidebarOpen(false);
 
-  if (
-    page !== "Dashboard" &&
-    page !== "Products" &&
-    page !== "Stock Movements" &&
-    page !== "Suppliers"
-  ) {
-    setNotice(`${page} module is coming soon.`);
-  }
-};
+    const availablePages = [
+      "Dashboard",
+      "Products",
+      "Stock Movements",
+      "Suppliers",
+      "Purchase Orders",
+    ];
+
+    if (!availablePages.includes(page)) {
+      setNotice(`${page} module is coming soon.`);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -305,7 +311,7 @@ const handleNavigate = (page: string) => {
     }
   };
 
-  // Conditional rendering happens after all hooks.
+  // Wait until authentication has been checked.
   if (authLoading) {
     return (
       <div className="auth-loading-screen">
@@ -319,8 +325,20 @@ const handleNavigate = (page: string) => {
     return <Login onAuthenticated={setUser} />;
   }
 
-const isStockMovementsPage = activePage === "Stock Movements";
-const isSuppliersPage = activePage === "Suppliers";
+  const isStockMovementsPage =
+    activePage === "Stock Movements";
+
+  const isSuppliersPage =
+    activePage === "Suppliers";
+
+  const isPurchaseOrdersPage =
+    activePage === "Purchase Orders";
+
+  const isProductsPage =
+    activePage === "Products";
+
+  const isDashboardPage =
+    activePage === "Dashboard";
 
   return (
     <div className="app-shell">
@@ -383,13 +401,19 @@ const isSuppliersPage = activePage === "Suppliers";
 
         <div className="page-content">
           {isStockMovementsPage ? (
-  <StockMovements canManageStock={canManageStock} />
-) : isSuppliersPage ? (
-  <Suppliers
-    canManageSuppliers={canManageSuppliers}
-    canDeleteSuppliers={canDeleteSuppliers}
-  />
-) : (
+            <StockMovements
+              canManageStock={canManageStock}
+            />
+          ) : isSuppliersPage ? (
+            <Suppliers
+              canManageSuppliers={canManageSuppliers}
+              canDeleteSuppliers={canDeleteSuppliers}
+            />
+          ) : isPurchaseOrdersPage ? (
+            <PurchaseOrders
+              canManagePurchaseOrders={canManagePurchaseOrders}
+            />
+          ) : (
             <>
               <section className="page-heading">
                 <div className="page-heading-copy">
@@ -399,14 +423,15 @@ const isSuppliersPage = activePage === "Suppliers";
                   </div>
 
                   <h1>
-                    {activePage === "Dashboard"
+                    {isDashboardPage
                       ? "Inventory Dashboard"
                       : activePage}
                   </h1>
 
                   <p>
-                    Monitor your stock, track inventory levels, and
-                    manage warehouse products in one place.
+                    {isProductsPage
+                      ? "Manage warehouse products, prices, and inventory levels."
+                      : "Monitor your stock, track inventory levels, and manage warehouse products in one place."}
                   </p>
                 </div>
 
@@ -419,7 +444,9 @@ const isSuppliersPage = activePage === "Suppliers";
                   >
                     <RefreshCw
                       size={17}
-                      className={refreshing ? "refresh-spinning" : ""}
+                      className={
+                        refreshing ? "refresh-spinning" : ""
+                      }
                     />
                     Refresh
                   </button>
@@ -438,7 +465,10 @@ const isSuppliersPage = activePage === "Suppliers";
               </section>
 
               {error && (
-                <div className="app-alert app-alert-error" role="alert">
+                <div
+                  className="app-alert app-alert-error"
+                  role="alert"
+                >
                   <AlertTriangle size={19} />
 
                   <div>
@@ -456,7 +486,10 @@ const isSuppliersPage = activePage === "Suppliers";
               )}
 
               {notice && (
-                <div className="app-alert app-alert-info" role="status">
+                <div
+                  className="app-alert app-alert-info"
+                  role="status"
+                >
                   <span>{notice}</span>
 
                   <button
@@ -469,100 +502,125 @@ const isSuppliersPage = activePage === "Suppliers";
                 </div>
               )}
 
-              <section className="stats-grid">
-                <StatCard
-                  title="Total Products"
-                  value={loading ? "—" : formatNumber(totalProducts)}
-                  subtitle="Registered inventory items"
-                  icon={Package}
-                  color="blue"
-                />
+              {isDashboardPage && (
+                <>
+                  <section className="stats-grid">
+                    <StatCard
+                      title="Total Products"
+                      value={
+                        loading
+                          ? "—"
+                          : formatNumber(totalProducts)
+                      }
+                      subtitle="Registered inventory items"
+                      icon={Package}
+                      color="blue"
+                    />
 
+                    <StatCard
+                      title="Total Units"
+                      value={
+                        loading
+                          ? "—"
+                          : formatNumber(totalUnits)
+                      }
+                      subtitle="Units currently in stock"
+                      icon={Boxes}
+                      color="green"
+                    />
 
+                    <StatCard
+                      title="Inventory Value"
+                      value={
+                        loading
+                          ? "—"
+                          : formatCurrency(inventoryValue)
+                      }
+                      subtitle="Estimated value of current stock"
+                      icon={Wallet}
+                      color="purple"
+                    />
 
-                <StatCard
-                  title="Total Units"
-                  value={loading ? "—" : formatNumber(totalUnits)}
-                  subtitle="Units currently in stock"
-                  icon={Boxes}
-                  color="green"
-                />
+                    <StatCard
+                      title="Low Stock"
+                      value={
+                        loading
+                          ? "—"
+                          : formatNumber(lowStockCount)
+                      }
+                      subtitle="Items at or below reorder level"
+                      icon={AlertTriangle}
+                      color="orange"
+                    />
+                  </section>
 
-                <StatCard
-                  title="Inventory Value"
-                  value={loading ? "—" : formatCurrency(inventoryValue)}
-                  subtitle="Estimated value of current stock"
-                  icon={Wallet}
-                  color="purple"
-                />
+                  {lowStockProducts.length > 0 && (
+                    <section className="low-stock-panel">
+                      <div className="low-stock-panel-header">
+                        <div>
+                          <h2>Low-Stock Alerts</h2>
+                          <p>
+                            Products that need replenishment
+                          </p>
+                        </div>
 
-                <StatCard
-                  title="Low Stock"
-                  value={loading ? "—" : formatNumber(lowStockCount)}
-                  subtitle="Items at or below reorder level"
-                  icon={AlertTriangle}
-                  color="orange"
-                />
-              
-{lowStockProducts.length > 0 && (
-  <section className="low-stock-panel">
-    <div className="low-stock-panel-header">
-      <div>
-        <h2>Low-Stock Alerts</h2>
-        <p>Products that need replenishment</p>
-      </div>
+                        <span className="low-stock-count">
+                          {lowStockProducts.length}{" "}
+                          {lowStockProducts.length === 1
+                            ? "item"
+                            : "items"}
+                        </span>
+                      </div>
 
-      <span className="low-stock-count">
-        {lowStockProducts.length}{" "}
-        {lowStockProducts.length === 1 ? "item" : "items"}
-      </span>
-    </div>
+                      <div className="low-stock-table-wrapper">
+                        <table className="low-stock-table">
+                          <thead>
+                            <tr>
+                              <th>Product</th>
+                              <th>Current Stock</th>
+                              <th>Reorder Level</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
 
-    <div className="low-stock-table-wrapper">
-      <table className="low-stock-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Current Stock</th>
-            <th>Reorder Level</th>
-            <th>Status</th>
-          </tr>
-        </thead>
+                          <tbody>
+                            {lowStockProducts.map((product) => (
+                              <tr key={product.id}>
+                                <td>
+                                  <div className="low-stock-product-info">
+                                    <strong>{product.name}</strong>
+                                    <span>
+                                      SKU: {product.sku}
+                                    </span>
+                                  </div>
+                                </td>
 
-        <tbody>
-          {lowStockProducts.map((product) => (
-            <tr key={product.id}>
-              <td>
-                <div className="low-stock-product-info">
-                  <strong>{product.name}</strong>
-                  <span>SKU: {product.sku}</span>
-                </div>
-              </td>
+                                <td>
+                                  <strong>
+                                    {product.quantity}
+                                  </strong>
+                                </td>
 
-              <td>
-                <strong>{product.quantity}</strong>
-              </td>
+                                <td>
+                                  {product.reorder_level}
+                                </td>
 
-              <td>{product.reorder_level}</td>
-
-              <td>
-                <span className="low-stock-badge">
-                  {Number(product.quantity) === 0
-                    ? "Out of Stock"
-                    : "Low Stock"}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </section>
-)}
-
-
-                
-              </section>
+                                <td>
+                                  <span className="low-stock-badge">
+                                    {Number(product.quantity) === 0
+                                      ? "Out of Stock"
+                                      : "Low Stock"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
 
               <ProductsTable
                 products={filteredProducts}
@@ -580,10 +638,13 @@ const isSuppliersPage = activePage === "Suppliers";
           )}
 
           <footer className="app-footer">
-            <span>© {new Date().getFullYear()} StockFlow</span>
-            <span>Warehouse Inventory Management System</span>
+            <span>
+              © {new Date().getFullYear()} StockFlow
+            </span>
+            <span>
+              Warehouse Inventory Management System
+            </span>
           </footer>
-          
         </div>
       </main>
 

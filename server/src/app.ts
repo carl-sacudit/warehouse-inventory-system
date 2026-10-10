@@ -9,6 +9,7 @@ import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import stockMovementRoutes from "./routes/stockMovement.routes.js";
 import supplierRoutes from "./routes/supplier.routes.js";
+import purchaseOrderRoutes from "./routes/purchaseOrder.routes.js";
 const app = express();
 
 const CLIENT_URL =
@@ -25,7 +26,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/api/stock-movements", stockMovementRoutes);
 app.use("/api/suppliers", supplierRoutes);
-
+app.use("/api/purchase-orders", purchaseOrderRoutes);
 // API health check
 app.get("/api/health", (_req, res) => {
   res.json({
