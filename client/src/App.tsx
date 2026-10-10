@@ -159,6 +159,16 @@ function App() {
       Number(product.quantity) <= Number(product.reorder_level)
   ).length;
 
+  const lowStockProducts = products
+  .filter(
+    (product) =>
+      Number(product.quantity) <= Number(product.reorder_level)
+  )
+  .sort(
+    (a, b) =>
+      Number(a.quantity) - Number(b.quantity)
+  );
+
   const formatNumber = (value: number) =>
     new Intl.NumberFormat("en-PH").format(value);
 
@@ -454,6 +464,8 @@ function App() {
                   color="blue"
                 />
 
+
+
                 <StatCard
                   title="Total Units"
                   value={loading ? "—" : formatNumber(totalUnits)}
@@ -477,6 +489,65 @@ function App() {
                   icon={AlertTriangle}
                   color="orange"
                 />
+              
+{lowStockProducts.length > 0 && (
+  <section className="low-stock-panel">
+    <div className="low-stock-panel-header">
+      <div>
+        <h2>Low-Stock Alerts</h2>
+        <p>Products that need replenishment</p>
+      </div>
+
+      <span className="low-stock-count">
+        {lowStockProducts.length}{" "}
+        {lowStockProducts.length === 1 ? "item" : "items"}
+      </span>
+    </div>
+
+    <div className="low-stock-table-wrapper">
+      <table className="low-stock-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Current Stock</th>
+            <th>Reorder Level</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {lowStockProducts.map((product) => (
+            <tr key={product.id}>
+              <td>
+                <div className="low-stock-product-info">
+                  <strong>{product.name}</strong>
+                  <span>SKU: {product.sku}</span>
+                </div>
+              </td>
+
+              <td>
+                <strong>{product.quantity}</strong>
+              </td>
+
+              <td>{product.reorder_level}</td>
+
+              <td>
+                <span className="low-stock-badge">
+                  {Number(product.quantity) === 0
+                    ? "Out of Stock"
+                    : "Low Stock"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+)}
+
+
+                
               </section>
 
               <ProductsTable
@@ -498,6 +569,7 @@ function App() {
             <span>© {new Date().getFullYear()} StockFlow</span>
             <span>Warehouse Inventory Management System</span>
           </footer>
+          
         </div>
       </main>
 
