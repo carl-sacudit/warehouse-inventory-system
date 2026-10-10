@@ -13,19 +13,31 @@ import {
   Trash2,
   LoaderCircle,
   AlertCircle,
+  PackageCheck,
+  Ban,
+  Send,
+  Pencil,
 } from "lucide-react";
 
 import {
   createPurchaseOrder,
   getPurchaseOrders,
+  getPurchaseOrderById,
+  updatePurchaseOrder,
+  updatePurchaseOrderStatus,
+  receivePurchaseOrder,
   type PurchaseOrder,
+  type PurchaseOrderItem,
   type PurchaseOrderInput,
   type PurchaseOrderStatus,
+  type ReceivedPurchaseOrderItem,
 } from "../services/purchaseOrderService";
+
 import {
   getSuppliers,
   type Supplier,
 } from "../services/supplierService";
+
 import {
   getProducts,
   type Product,
@@ -50,6 +62,10 @@ interface OrderFormItem {
   quantity_ordered: string;
   unit_cost: string;
 }
+
+type PurchaseOrderWithItems = PurchaseOrder & {
+  items: PurchaseOrderItem[];
+};
 
 function getToday(): string {
   const now = new Date();
@@ -96,9 +112,11 @@ function formatStatus(status: PurchaseOrderStatus): string {
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
 }
+
 interface PurchaseOrdersProps {
   canManagePurchaseOrders: boolean;
 }
+
 function PurchaseOrders({
   canManagePurchaseOrders,
 }: PurchaseOrdersProps) {
@@ -108,6 +126,8 @@ function PurchaseOrders({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [actionOrderId, setActionOrderId] = useState<number | null>(null);
+
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -116,15 +136,30 @@ function PurchaseOrders({
     useState<"ALL" | PurchaseOrderStatus>("ALL");
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] =
+    useState<PurchaseOrderWithItems | null>(null);
 
   const [supplierId, setSupplierId] = useState("");
   const [orderDate, setOrderDate] = useState(getToday());
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
+
   const [formItems, setFormItems] = useState<OrderFormItem[]>([
     createEmptyItem(),
   ]);
+
   const [formError, setFormError] = useState("");
+
+  // Receive-stock modal state
+  const [receivingOrder, setReceivingOrder] =
+    useState<PurchaseOrderWithItems | null>(null);
+
+  const [receiveQuantities, setReceiveQuantities] = useState<
+    Record<number, string>
+  >({});
+
+  const [receiveError, setReceiveError] = useState("");
+  const [isReceiving, setIsReceiving] = useState(false);
 
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -152,43 +187,20 @@ function PurchaseOrders({
     }
   }, []);
 
-
 useEffect(() => {
-  const controller = new AbortController();
+  let cancelled = false;
 
-  const loadInitialData = async () => {
-    try {
-      const [orderData, supplierData, productData] = await Promise.all([
-        getPurchaseOrders(),
-        getSuppliers(),
-        getProducts(),
-      ]);
-
-      if (controller.signal.aborted) return;
-
-      setOrders(orderData);
-      setSuppliers(supplierData);
-      setProducts(productData);
-    } catch (err) {
-      if (controller.signal.aborted) return;
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load purchase order data."
-      );
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsLoading(false);
-      }
+  const timerId = window.setTimeout(() => {
+    if (!cancelled) {
+      void loadData();
     }
+  }, 0);
+
+  return () => {
+    cancelled = true;
+    window.clearTimeout(timerId);
   };
-
-  void loadInitialData();
-
-  return () => controller.abort();
-}, []);
-
+}, [loadData]);
 
   const filteredOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -220,7 +232,10 @@ useEffect(() => {
 
   const totalValue = orders
     .filter((order) => order.status !== "CANCELLED")
-    .reduce((total, order) => total + Number(order.total_amount || 0), 0);
+    .reduce(
+      (total, order) => total + Number(order.total_amount || 0),
+      0
+    );
 
   const formTotal = formItems.reduce((total, item) => {
     const quantity = Number(item.quantity_ordered) || 0;
@@ -240,14 +255,62 @@ useEffect(() => {
 
   function openCreateModal() {
     resetForm();
+    setEditingOrder(null);
+    setError("");
     setSuccessMessage("");
     setIsCreateModalOpen(true);
+  }
+
+  async function openEditModal(order: PurchaseOrder) {
+    if (actionOrderId !== null) return;
+
+    setActionOrderId(order.id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const details = await getPurchaseOrderById(order.id);
+
+      if (details.status !== "DRAFT") {
+        throw new Error("Only draft purchase orders can be edited.");
+      }
+
+      if (!details.items || details.items.length === 0) {
+        throw new Error("This purchase order does not contain any items.");
+      }
+
+      setEditingOrder(details as PurchaseOrderWithItems);
+      setSupplierId(String(details.supplier_id));
+      setOrderDate(details.order_date.slice(0, 10));
+      setExpectedDeliveryDate(
+        details.expected_delivery_date?.slice(0, 10) ?? ""
+      );
+      setNotes(details.notes ?? "");
+      setFormItems(
+        details.items.map((item) => ({
+          product_id: String(item.product_id),
+          quantity_ordered: String(item.quantity_ordered),
+          unit_cost: String(item.unit_cost),
+        }))
+      );
+      setFormError("");
+      setIsCreateModalOpen(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load purchase order details."
+      );
+    } finally {
+      setActionOrderId(null);
+    }
   }
 
   function closeCreateModal() {
     if (isSaving) return;
 
     setIsCreateModalOpen(false);
+    setEditingOrder(null);
     setFormError("");
   }
 
@@ -258,9 +321,7 @@ useEffect(() => {
   ) {
     setFormItems((current) =>
       current.map((item, itemIndex) =>
-        itemIndex === index
-          ? { ...item, [field]: value }
-          : item
+        itemIndex === index ? { ...item, [field]: value } : item
       )
     );
   }
@@ -303,6 +364,7 @@ useEffect(() => {
   ) {
     event.preventDefault();
     setFormError("");
+    setError("");
     setSuccessMessage("");
 
     if (!supplierId) {
@@ -339,16 +401,21 @@ useEffect(() => {
       const unitCost = Number(item.unit_cost);
 
       if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-        setFormError("Each item must have a positive whole-number quantity.");
+        setFormError(
+          "Each item must have a positive whole-number quantity."
+        );
         return;
       }
 
       if (
         item.unit_cost.trim() === "" ||
         !Number.isFinite(unitCost) ||
-        unitCost < 0
+        unitCost < 0 ||
+        unitCost > 9999999999.99
       ) {
-        setFormError("Enter a valid, non-negative unit cost for every item.");
+        setFormError(
+          "Enter a valid, non-negative unit cost for every item."
+        );
         return;
       }
     }
@@ -368,13 +435,23 @@ useEffect(() => {
     setIsSaving(true);
 
     try {
-      const created = await createPurchaseOrder(input);
+      if (editingOrder) {
+        await updatePurchaseOrder(editingOrder.id, input);
+        setIsCreateModalOpen(false);
+        resetForm();
+        setEditingOrder(null);
+        setSuccessMessage(
+          `Purchase order ${editingOrder.po_number} was updated successfully.`
+        );
+      } else {
+        const created = await createPurchaseOrder(input);
 
-      setIsCreateModalOpen(false);
-      resetForm();
-      setSuccessMessage(
-        `Purchase order ${created.po_number} was created successfully.`
-      );
+        setIsCreateModalOpen(false);
+        resetForm();
+        setSuccessMessage(
+          `Purchase order ${created.po_number} was created successfully.`
+        );
+      }
 
       await loadData(false);
     } catch (err) {
@@ -385,6 +462,193 @@ useEffect(() => {
       );
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleStatusChange(
+    order: PurchaseOrder,
+    status: "ORDERED" | "CANCELLED"
+  ) {
+    if (actionOrderId !== null) return;
+
+    if (
+      status === "CANCELLED" &&
+      !window.confirm(
+        `Are you sure you want to cancel purchase order ${order.po_number}?`
+      )
+    ) {
+      return;
+    }
+
+    setActionOrderId(order.id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await updatePurchaseOrderStatus(order.id, status);
+
+      setSuccessMessage(
+        status === "ORDERED"
+          ? `Purchase order ${order.po_number} marked as ordered.`
+          : `Purchase order ${order.po_number} cancelled.`
+      );
+
+      await loadData(false);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to update the purchase order status."
+      );
+    } finally {
+      setActionOrderId(null);
+    }
+  }
+
+  async function openReceiveModal(order: PurchaseOrder) {
+    if (actionOrderId !== null || isReceiving) return;
+
+    setActionOrderId(order.id);
+    setError("");
+    setSuccessMessage("");
+    setReceiveError("");
+
+    try {
+      const details = await getPurchaseOrderById(order.id);
+
+      if (!details.items || details.items.length === 0) {
+        throw new Error(
+          "This purchase order does not contain any items."
+        );
+      }
+
+      if (
+        details.status !== "ORDERED" &&
+        details.status !== "PARTIALLY_RECEIVED"
+      ) {
+        throw new Error(
+          "Only ordered or partially received orders can receive stock."
+        );
+      }
+
+      setReceivingOrder(
+        details as PurchaseOrderWithItems
+      );
+
+      setReceiveQuantities(
+        Object.fromEntries(
+          details.items.map((item) => [
+            item.id,
+            "",
+          ])
+        )
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load purchase order details."
+      );
+    } finally {
+      setActionOrderId(null);
+    }
+  }
+
+  function closeReceiveModal() {
+    if (isReceiving) return;
+
+    setReceivingOrder(null);
+    setReceiveQuantities({});
+    setReceiveError("");
+  }
+
+  function updateReceiveQuantity(
+    itemId: number,
+    value: string
+  ) {
+    setReceiveQuantities((current) => ({
+      ...current,
+      [itemId]: value,
+    }));
+  }
+
+  async function handleReceiveStock(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+    setReceiveError("");
+    setError("");
+    setSuccessMessage("");
+
+    if (!receivingOrder) return;
+
+    const items: ReceivedPurchaseOrderItem[] = [];
+
+    for (const item of receivingOrder.items) {
+      const rawQuantity = receiveQuantities[item.id]?.trim() ?? "";
+
+      // Empty inputs mean no quantity is being received for this item.
+      if (rawQuantity === "") continue;
+
+      const quantity = Number(rawQuantity);
+      const remaining =
+        Number(item.quantity_ordered) - Number(item.quantity_received);
+
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        setReceiveError(
+          `Enter a positive whole-number quantity for ${item.product_name}, or leave it blank.`
+        );
+        return;
+      }
+
+      if (quantity > remaining) {
+        setReceiveError(
+          `The quantity for ${item.product_name} cannot exceed the remaining quantity of ${remaining}.`
+        );
+        return;
+      }
+
+      items.push({
+        item_id: item.id,
+        quantity,
+      });
+    }
+
+    if (items.length === 0) {
+      setReceiveError(
+        "Enter a quantity for at least one item before receiving stock."
+      );
+      return;
+    }
+
+    setIsReceiving(true);
+
+    try {
+      const result = await receivePurchaseOrder(
+        receivingOrder.id,
+        items
+      );
+
+      const orderNumber = receivingOrder.po_number;
+
+      setReceivingOrder(null);
+      setReceiveQuantities({});
+
+      setSuccessMessage(
+        result.status === "RECEIVED"
+          ? `Purchase order ${orderNumber} has been fully received. Inventory and stock movement history have been updated.`
+          : `Stock received for ${orderNumber}. The purchase order remains partially received.`
+      );
+
+      await loadData(false);
+    } catch (err) {
+      setReceiveError(
+        err instanceof Error
+          ? err.message
+          : "Unable to receive stock for this purchase order."
+      );
+    } finally {
+      setIsReceiving(false);
     }
   }
 
@@ -405,16 +669,16 @@ useEffect(() => {
           </p>
         </div>
 
-{canManagePurchaseOrders && (
-  <button
-    type="button"
-    className="po-primary-button"
-    onClick={() => setIsCreateModalOpen(true)}
-  >
-    <Plus size={18} />
-    Create Purchase Order
-  </button>
-)}
+        {canManagePurchaseOrders && (
+          <button
+            type="button"
+            className="po-primary-button"
+            onClick={openCreateModal}
+          >
+            <Plus size={18} />
+            Create Purchase Order
+          </button>
+        )}
       </section>
 
       {error && (
@@ -508,7 +772,10 @@ useEffect(() => {
             onClick={() => void loadData()}
             disabled={isLoading}
           >
-            <RefreshCw size={17} className={isLoading ? "po-spin" : ""} />
+            <RefreshCw
+              size={17}
+              className={isLoading ? "po-spin" : ""}
+            />
           </button>
         </div>
 
@@ -552,13 +819,14 @@ useEffect(() => {
                 <th>Expected Delivery</th>
                 <th>Total Amount</th>
                 <th>Status</th>
+                {canManagePurchaseOrders && <th>Actions</th>}
               </tr>
             </thead>
 
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={canManagePurchaseOrders ? 7 : 6}>
                     <div className="po-loading-state">
                       <LoaderCircle size={25} className="po-spin" />
                       <span>Loading purchase orders...</span>
@@ -566,29 +834,152 @@ useEffect(() => {
                   </td>
                 </tr>
               ) : filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td>
-                      <strong>{order.po_number}</strong>
-                    </td>
-                    <td>{order.supplier_name}</td>
-                    <td>{formatDate(order.order_date)}</td>
-                    <td>{formatDate(order.expected_delivery_date)}</td>
-                    <td className="po-amount">
-                      {formatCurrency(Number(order.total_amount))}
-                    </td>
-                    <td>
-                      <span
-                        className={`po-status-badge po-status-${order.status.toLowerCase()}`}
-                      >
-                        {formatStatus(order.status)}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredOrders.map((order) => {
+                  const isActing = actionOrderId === order.id;
+
+                  return (
+                    <tr key={order.id}>
+                      <td>
+                        <strong>{order.po_number}</strong>
+                      </td>
+                      <td>{order.supplier_name}</td>
+                      <td>{formatDate(order.order_date)}</td>
+                      <td>{formatDate(order.expected_delivery_date)}</td>
+                      <td className="po-amount">
+                        {formatCurrency(Number(order.total_amount))}
+                      </td>
+                      <td>
+                        <span
+                          className={`po-status-badge po-status-${order.status.toLowerCase()}`}
+                        >
+                          {formatStatus(order.status)}
+                        </span>
+                      </td>
+
+                      {canManagePurchaseOrders && (
+                        <td>
+                          <div className="po-actions">
+                            {order.status === "DRAFT" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="po-action-button po-action-edit"
+                                  title="Edit draft purchase order"
+                                  disabled={actionOrderId !== null}
+                                  onClick={() => void openEditModal(order)}
+                                >
+                                  {isActing ? (
+                                    <LoaderCircle size={15} className="po-spin" />
+                                  ) : (
+                                    <Pencil size={15} />
+                                  )}
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="po-action-button po-action-order"
+                                  title="Mark this order as ordered"
+                                  disabled={actionOrderId !== null}
+                                  onClick={() =>
+                                    void handleStatusChange(order, "ORDERED")
+                                  }
+                                >
+                                  {isActing ? (
+                                    <LoaderCircle
+                                      size={15}
+                                      className="po-spin"
+                                    />
+                                  ) : (
+                                    <Send size={15} />
+                                  )}
+                                  Order
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="po-action-button po-action-cancel"
+                                  title="Cancel purchase order"
+                                  disabled={actionOrderId !== null}
+                                  onClick={() =>
+                                    void handleStatusChange(order, "CANCELLED")
+                                  }
+                                >
+                                  <Ban size={15} />
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+
+                            {order.status === "ORDERED" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="po-action-button po-action-receive"
+                                  disabled={actionOrderId !== null}
+                                  onClick={() =>
+                                    void openReceiveModal(order)
+                                  }
+                                >
+                                  {isActing ? (
+                                    <LoaderCircle
+                                      size={15}
+                                      className="po-spin"
+                                    />
+                                  ) : (
+                                    <PackageCheck size={15} />
+                                  )}
+                                  Receive
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="po-action-button po-action-cancel"
+                                  disabled={actionOrderId !== null}
+                                  onClick={() =>
+                                    void handleStatusChange(order, "CANCELLED")
+                                  }
+                                >
+                                  <Ban size={15} />
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+
+                            {order.status === "PARTIALLY_RECEIVED" && (
+                              <button
+                                type="button"
+                                className="po-action-button po-action-receive"
+                                disabled={actionOrderId !== null}
+                                onClick={() =>
+                                  void openReceiveModal(order)
+                                }
+                              >
+                                {isActing ? (
+                                  <LoaderCircle
+                                    size={15}
+                                    className="po-spin"
+                                  />
+                                ) : (
+                                  <PackageCheck size={15} />
+                                )}
+                                Receive
+                              </button>
+                            )}
+
+                            {(order.status === "RECEIVED" ||
+                              order.status === "CANCELLED") && (
+                              <span className="po-no-actions">—</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={canManagePurchaseOrders ? 7 : 6}>
                     <div className="po-empty-state">
                       <div className="po-empty-icon">
                         <ClipboardList size={27} />
@@ -606,17 +997,21 @@ useEffect(() => {
                           : "Create a purchase order to start tracking supplier deliveries."}
                       </p>
 
-                      {!searchQuery && statusFilter === "ALL" && (
-                        <button
-                          type="button"
-                          className="po-primary-button"
-                          onClick={openCreateModal}
-                          disabled={suppliers.length === 0 || products.length === 0}
-                        >
-                          <Plus size={17} />
-                          Create First Order
-                        </button>
-                      )}
+                      {!searchQuery &&
+                        statusFilter === "ALL" &&
+                        canManagePurchaseOrders && (
+                          <button
+                            type="button"
+                            className="po-primary-button"
+                            onClick={openCreateModal}
+                            disabled={
+                              suppliers.length === 0 || products.length === 0
+                            }
+                          >
+                            <Plus size={17} />
+                            Create First Order
+                          </button>
+                        )}
                     </div>
                   </td>
                 </tr>
@@ -630,6 +1025,7 @@ useEffect(() => {
         </div>
       </section>
 
+      {/* Create Purchase Order Modal */}
       {isCreateModalOpen && (
         <div
           className="po-modal-overlay"
@@ -647,8 +1043,14 @@ useEffect(() => {
           >
             <header className="po-modal-header">
               <div>
-                <h2 id="po-modal-title">Create Purchase Order</h2>
-                <p>Set up a new order from your supplier.</p>
+                <h2 id="po-modal-title">
+                  {editingOrder ? "Edit Purchase Order" : "Create Purchase Order"}
+                </h2>
+                <p>
+                  {editingOrder
+                    ? `Update draft ${editingOrder.po_number} before it is ordered.`
+                    : "Set up a new order from your supplier."}
+                </p>
               </div>
 
               <button
@@ -689,7 +1091,9 @@ useEffect(() => {
                         <span>Supplier <b>*</b></span>
                         <select
                           value={supplierId}
-                          onChange={(event) => setSupplierId(event.target.value)}
+                          onChange={(event) =>
+                            setSupplierId(event.target.value)
+                          }
                           required
                           disabled={isSaving}
                         >
@@ -707,7 +1111,9 @@ useEffect(() => {
                         <input
                           type="date"
                           value={orderDate}
-                          onChange={(event) => setOrderDate(event.target.value)}
+                          onChange={(event) =>
+                            setOrderDate(event.target.value)
+                          }
                           required
                           disabled={isSaving}
                         />
@@ -770,6 +1176,7 @@ useEffect(() => {
                           <div className="po-form-item" key={index}>
                             <div className="po-form-item-top">
                               <strong>Item {index + 1}</strong>
+
                               <button
                                 type="button"
                                 className="po-remove-item"
@@ -786,12 +1193,16 @@ useEffect(() => {
                               <select
                                 value={item.product_id}
                                 onChange={(event) =>
-                                  handleProductChange(index, event.target.value)
+                                  handleProductChange(
+                                    index,
+                                    event.target.value
+                                  )
                                 }
                                 required
                                 disabled={isSaving}
                               >
                                 <option value="">Select a product</option>
+
                                 {products.map((product) => {
                                   const usedElsewhere = formItems.some(
                                     (otherItem, otherIndex) =>
@@ -810,6 +1221,7 @@ useEffect(() => {
                                   );
                                 })}
                               </select>
+
                               {selectedProduct && (
                                 <small>
                                   Current stock: {selectedProduct.quantity}
@@ -902,7 +1314,148 @@ useEffect(() => {
                   ) : (
                     <>
                       <Plus size={17} />
-                      Create Draft Order
+                      {editingOrder ? "Save Changes" : "Create Draft Order"}
+                    </>
+                  )}
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* Receive Stock Modal */}
+      {receivingOrder && (
+        <div
+          className="po-modal-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeReceiveModal();
+            }
+          }}
+        >
+          <section
+            className="po-modal po-receive-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="po-receive-title"
+          >
+            <header className="po-modal-header">
+              <div>
+                <h2 id="po-receive-title">Receive Stock</h2>
+                <p>
+                  {receivingOrder.po_number} · {receivingOrder.supplier_name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="po-icon-button"
+                aria-label="Close receiving dialog"
+                onClick={closeReceiveModal}
+                disabled={isReceiving}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <form onSubmit={handleReceiveStock}>
+              <div className="po-modal-body">
+                <div className="po-receive-notice">
+                  <PackageCheck size={19} />
+                  <p>
+                    Enter the quantities delivered in this shipment. Leave an
+                    item blank if none of it arrived. Only the quantities
+                    entered here will be added to inventory.
+                  </p>
+                </div>
+
+                {receiveError && (
+                  <div className="po-alert po-alert-error" role="alert">
+                    <AlertCircle size={18} />
+                    <span>{receiveError}</span>
+                  </div>
+                )}
+
+                <div className="po-receive-items">
+                  {receivingOrder.items.map((item) => {
+                    const ordered = Number(item.quantity_ordered);
+                    const previouslyReceived = Number(item.quantity_received);
+                    const remaining = ordered - previouslyReceived;
+
+                    return (
+                      <div className="po-receive-item" key={item.id}>
+                        <div className="po-receive-item-heading">
+                          <div>
+                            <strong>{item.product_name}</strong>
+                            <small>{item.sku}</small>
+                          </div>
+
+                          <span className="po-receive-remaining">
+                            {remaining} remaining
+                          </span>
+                        </div>
+
+                        <div className="po-receive-quantity-grid">
+                          <div>
+                            <span>Ordered</span>
+                            <strong>{ordered}</strong>
+                          </div>
+
+                          <div>
+                            <span>Received</span>
+                            <strong>{previouslyReceived}</strong>
+                          </div>
+
+                          <label className="po-form-field">
+                            <span>Receive Now</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={remaining}
+                              step="1"
+                              value={receiveQuantities[item.id] ?? ""}
+                              onChange={(event) =>
+                                updateReceiveQuantity(
+                                  item.id,
+                                  event.target.value
+                                )
+                              }
+                              placeholder="0"
+                              disabled={isReceiving || remaining <= 0}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <footer className="po-modal-footer">
+                <button
+                  type="button"
+                  className="po-secondary-button"
+                  onClick={closeReceiveModal}
+                  disabled={isReceiving}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="po-primary-button"
+                  disabled={isReceiving}
+                >
+                  {isReceiving ? (
+                    <>
+                      <LoaderCircle size={17} className="po-spin" />
+                      Receiving...
+                    </>
+                  ) : (
+                    <>
+                      <PackageCheck size={17} />
+                      Confirm Received Stock
                     </>
                   )}
                 </button>

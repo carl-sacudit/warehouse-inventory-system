@@ -317,6 +317,98 @@
   font-weight: 650;
 }
 
+.po-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.po-action-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.po-action-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.po-action-button:focus-visible {
+  outline: 3px solid rgb(49 95 232 / 25%);
+  outline-offset: 2px;
+}
+
+.po-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.po-action-edit {
+  border-color: #dbe2ea;
+  background: #fff;
+  color: #475569;
+}
+
+.po-action-edit:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #243047;
+}
+
+.po-action-order {
+  border-color: #c8d7ff;
+  background: #edf3ff;
+  color: #315ac8;
+}
+
+.po-action-order:hover:not(:disabled) {
+  border-color: #a9c0ff;
+  background: #dfeaff;
+  color: #2449aa;
+}
+
+.po-action-receive {
+  border-color: #b7e5c8;
+  background: #eaf8ef;
+  color: #16834a;
+}
+
+.po-action-receive:hover:not(:disabled) {
+  border-color: #8fd4aa;
+  background: #dcf3e5;
+  color: #116b3b;
+}
+
+.po-action-cancel {
+  border-color: #f3c7c5;
+  background: #fff4f3;
+  color: #b42318;
+}
+
+.po-action-cancel:hover:not(:disabled) {
+  border-color: #eba9a5;
+  background: #feeceb;
+  color: #912018;
+}
+
+.po-no-actions {
+  color: #94a3b8;
+}
+
 .po-status-badge {
   display: inline-flex;
   align-items: center;
