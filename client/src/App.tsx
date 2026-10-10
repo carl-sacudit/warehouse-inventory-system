@@ -18,6 +18,7 @@ import ProductsTable from "./components/ProductsTable";
 import ProductModal from "./components/ProductModal";
 import Login from "./components/Login";
 import StockMovements from "./components/StockMovements";
+import Suppliers from "./components/Suppliers";
 
 import { authService, type AuthUser } from "./services/authService";
 import {
@@ -52,6 +53,12 @@ function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState("");
+
+  const canManageSuppliers =
+  user?.role === "ADMIN" ||
+  user?.role === "WAREHOUSE_MANAGER";
+
+  const canDeleteSuppliers = user?.role === "ADMIN";
 
   const canManageProducts =
     user?.role === "ADMIN" ||
@@ -262,21 +269,22 @@ function App() {
     }
   };
 
-  const handleNavigate = (page: string) => {
-    setActivePage(page);
-    setSearchQuery("");
-    setError("");
-    setNotice("");
-    setSidebarOpen(false);
+const handleNavigate = (page: string) => {
+  setActivePage(page);
+  setSearchQuery("");
+  setError("");
+  setNotice("");
+  setSidebarOpen(false);
 
-    if (
-      page !== "Dashboard" &&
-      page !== "Products" &&
-      page !== "Stock Movements"
-    ) {
-      setNotice(`${page} module is coming soon.`);
-    }
-  };
+  if (
+    page !== "Dashboard" &&
+    page !== "Products" &&
+    page !== "Stock Movements" &&
+    page !== "Suppliers"
+  ) {
+    setNotice(`${page} module is coming soon.`);
+  }
+};
 
   const handleLogout = async () => {
     try {
@@ -311,7 +319,8 @@ function App() {
     return <Login onAuthenticated={setUser} />;
   }
 
-  const isStockMovementsPage = activePage === "Stock Movements";
+const isStockMovementsPage = activePage === "Stock Movements";
+const isSuppliersPage = activePage === "Suppliers";
 
   return (
     <div className="app-shell">
@@ -374,8 +383,13 @@ function App() {
 
         <div className="page-content">
           {isStockMovementsPage ? (
-            <StockMovements canManageStock={canManageStock} />
-          ) : (
+  <StockMovements canManageStock={canManageStock} />
+) : isSuppliersPage ? (
+  <Suppliers
+    canManageSuppliers={canManageSuppliers}
+    canDeleteSuppliers={canDeleteSuppliers}
+  />
+) : (
             <>
               <section className="page-heading">
                 <div className="page-heading-copy">
