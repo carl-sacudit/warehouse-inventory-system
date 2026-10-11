@@ -12,6 +12,7 @@ export interface PurchaseOrderItemInput {
   product_id: number;
   quantity_ordered: number;
   unit_cost?: number;
+  supplier_srp?: number;
 }
 
 export interface PurchaseOrderInput {
@@ -30,6 +31,7 @@ export interface PurchaseOrderItem {
   quantity_ordered: number;
   quantity_received: number;
   unit_cost: number | string;
+  supplier_srp: number | string;
   line_total: number | string;
 }
 

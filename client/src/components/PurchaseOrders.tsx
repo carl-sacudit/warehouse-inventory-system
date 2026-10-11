@@ -43,6 +43,7 @@ import {
   type Product,
 } from "../services/productService";
 import ProductThumbnail from "./ProductThumbnail.tsx";
+import { useToast } from "./ToastProvider.tsx";
 
 import "./PurchaseOrders.css";
 
@@ -62,6 +63,7 @@ interface OrderFormItem {
   product_id: string;
   quantity_ordered: string;
   unit_cost: string;
+  supplier_srp: string;
 }
 
 type PurchaseOrderWithItems = PurchaseOrder & {
@@ -82,6 +84,7 @@ function createEmptyItem(): OrderFormItem {
     product_id: "",
     quantity_ordered: "1",
     unit_cost: "",
+    supplier_srp: "",
   };
 }
 
@@ -121,6 +124,7 @@ interface PurchaseOrdersProps {
 function PurchaseOrders({
   canManagePurchaseOrders,
 }: PurchaseOrdersProps) {
+  const notify = useToast();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -129,8 +133,6 @@ function PurchaseOrders({
   const [isSaving, setIsSaving] = useState(false);
   const [actionOrderId, setActionOrderId] = useState<number | null>(null);
 
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] =
@@ -165,8 +167,6 @@ function PurchaseOrders({
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
 
-    setError("");
-
     try {
       const [orderData, supplierData, productData] = await Promise.all([
         getPurchaseOrders(),
@@ -178,15 +178,11 @@ function PurchaseOrders({
       setSuppliers(supplierData);
       setProducts(productData);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load purchase order data."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to load purchase order data.");
     } finally {
       if (showLoading) setIsLoading(false);
     }
-  }, []);
+  }, [notify]);
 
 useEffect(() => {
   let cancelled = false;
@@ -257,8 +253,6 @@ useEffect(() => {
   function openCreateModal() {
     resetForm();
     setEditingOrder(null);
-    setError("");
-    setSuccessMessage("");
     setIsCreateModalOpen(true);
   }
 
@@ -266,8 +260,6 @@ useEffect(() => {
     if (actionOrderId !== null) return;
 
     setActionOrderId(order.id);
-    setError("");
-    setSuccessMessage("");
 
     try {
       const details = await getPurchaseOrderById(order.id);
@@ -292,16 +284,13 @@ useEffect(() => {
           product_id: String(item.product_id),
           quantity_ordered: String(item.quantity_ordered),
           unit_cost: String(item.unit_cost),
+          supplier_srp: String(item.supplier_srp),
         }))
       );
       setFormError("");
       setIsCreateModalOpen(true);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load purchase order details."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to load purchase order details.");
     } finally {
       setActionOrderId(null);
     }
@@ -340,8 +329,13 @@ useEffect(() => {
               product_id: productId,
               unit_cost:
                 product && item.unit_cost === ""
-                  ? String(product.unit_price)
+                  ? Number(product.average_unit_cost) > 0
+                    ? String(product.average_unit_cost)
+                    : ""
                   : item.unit_cost,
+              supplier_srp: product
+                ? String(product.supplier_srp)
+                : "",
             }
           : item
       )
@@ -365,8 +359,6 @@ useEffect(() => {
   ) {
     event.preventDefault();
     setFormError("");
-    setError("");
-    setSuccessMessage("");
 
     if (!supplierId) {
       setFormError("Please select a supplier.");
@@ -419,6 +411,17 @@ useEffect(() => {
         );
         return;
       }
+
+      const supplierSrp = Number(item.supplier_srp);
+      if (
+        item.supplier_srp.trim() === "" ||
+        !Number.isFinite(supplierSrp) ||
+        supplierSrp < 0 ||
+        supplierSrp > 9999999999.99
+      ) {
+        setFormError("Enter a valid Supplier SRP for every item.");
+        return;
+      }
     }
 
     const input: PurchaseOrderInput = {
@@ -430,6 +433,8 @@ useEffect(() => {
         product_id: Number(item.product_id),
         quantity_ordered: Number(item.quantity_ordered),
         unit_cost: Math.round(Number(item.unit_cost) * 100) / 100,
+        supplier_srp:
+          Math.round(Number(item.supplier_srp) * 100) / 100,
       })),
     };
 
@@ -441,7 +446,7 @@ useEffect(() => {
         setIsCreateModalOpen(false);
         resetForm();
         setEditingOrder(null);
-        setSuccessMessage(
+        notify("success",
           `Purchase order ${editingOrder.po_number} was updated successfully.`
         );
       } else {
@@ -449,18 +454,14 @@ useEffect(() => {
 
         setIsCreateModalOpen(false);
         resetForm();
-        setSuccessMessage(
+        notify("success",
           `Purchase order ${created.po_number} was created successfully.`
         );
       }
 
       await loadData(false);
     } catch (err) {
-      setFormError(
-        err instanceof Error
-          ? err.message
-          : "Unable to create the purchase order."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to save the purchase order.");
     } finally {
       setIsSaving(false);
     }
@@ -482,13 +483,11 @@ useEffect(() => {
     }
 
     setActionOrderId(order.id);
-    setError("");
-    setSuccessMessage("");
 
     try {
       await updatePurchaseOrderStatus(order.id, status);
 
-      setSuccessMessage(
+      notify("success",
         status === "ORDERED"
           ? `Purchase order ${order.po_number} marked as ordered.`
           : `Purchase order ${order.po_number} cancelled.`
@@ -496,11 +495,7 @@ useEffect(() => {
 
       await loadData(false);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to update the purchase order status."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to update the purchase order status.");
     } finally {
       setActionOrderId(null);
     }
@@ -510,8 +505,6 @@ useEffect(() => {
     if (actionOrderId !== null || isReceiving) return;
 
     setActionOrderId(order.id);
-    setError("");
-    setSuccessMessage("");
     setReceiveError("");
 
     try {
@@ -545,11 +538,7 @@ useEffect(() => {
         )
       );
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load purchase order details."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to load purchase order details.");
     } finally {
       setActionOrderId(null);
     }
@@ -578,8 +567,6 @@ useEffect(() => {
   ) {
     event.preventDefault();
     setReceiveError("");
-    setError("");
-    setSuccessMessage("");
 
     if (!receivingOrder) return;
 
@@ -635,7 +622,7 @@ useEffect(() => {
       setReceivingOrder(null);
       setReceiveQuantities({});
 
-      setSuccessMessage(
+      notify("success",
         result.status === "RECEIVED"
           ? `Purchase order ${orderNumber} has been fully received. Inventory and stock movement history have been updated.`
           : `Stock received for ${orderNumber}. The purchase order remains partially received.`
@@ -643,11 +630,7 @@ useEffect(() => {
 
       await loadData(false);
     } catch (err) {
-      setReceiveError(
-        err instanceof Error
-          ? err.message
-          : "Unable to receive stock for this purchase order."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to receive stock for this purchase order.");
     } finally {
       setIsReceiving(false);
     }
@@ -681,36 +664,6 @@ useEffect(() => {
           </button>
         )}
       </section>
-
-      {error && (
-        <div className="po-alert po-alert-error" role="alert">
-          <AlertCircle size={18} />
-          <span>{error}</span>
-          <button
-            type="button"
-            className="po-icon-button"
-            aria-label="Dismiss error"
-            onClick={() => setError("")}
-          >
-            <X size={17} />
-          </button>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="po-alert po-alert-success" role="status">
-          <CheckCircle2 size={18} />
-          <span>{successMessage}</span>
-          <button
-            type="button"
-            className="po-icon-button"
-            aria-label="Dismiss success message"
-            onClick={() => setSuccessMessage("")}
-          >
-            <X size={17} />
-          </button>
-        </div>
-      )}
 
       <section className="po-stats-grid">
         <article className="po-stat-card">
@@ -906,7 +859,7 @@ useEffect(() => {
                                     void handleStatusChange(order, "CANCELLED")
                                   }
                                 >
-                                  <Ban size={15} />
+                                  {isActing ? <LoaderCircle size={15} className="po-spin" /> : <Ban size={15} />}
                                   Cancel
                                 </button>
                               </>
@@ -941,7 +894,7 @@ useEffect(() => {
                                     void handleStatusChange(order, "CANCELLED")
                                   }
                                 >
-                                  <Ban size={15} />
+                                  {isActing ? <LoaderCircle size={15} className="po-spin" /> : <Ban size={15} />}
                                   Cancel
                                 </button>
                               </>
@@ -1239,7 +1192,7 @@ useEffect(() => {
                               </div>
                             )}
 
-                            <div className="po-item-fields-grid">
+                            <div className="po-item-fields-grid po-item-fields-three">
                               <label className="po-form-field">
                                 <span>Quantity <b>*</b></span>
                                 <input
@@ -1271,6 +1224,26 @@ useEffect(() => {
                                     updateFormItem(
                                       index,
                                       "unit_cost",
+                                      event.target.value
+                                    )
+                                  }
+                                  required
+                                  disabled={isSaving}
+                                />
+                              </label>
+
+                              <label className="po-form-field">
+                                <span>Supplier SRP (PHP) <b>*</b></span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="9999999999.99"
+                                  step="0.01"
+                                  value={item.supplier_srp}
+                                  onChange={(event) =>
+                                    updateFormItem(
+                                      index,
+                                      "supplier_srp",
                                       event.target.value
                                     )
                                   }

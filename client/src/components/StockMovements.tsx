@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CalendarDays,
   Filter,
+  LoaderCircle,
 } from "lucide-react";
 
 import {
@@ -20,6 +21,7 @@ import {
   type StockMovement,
 } from "../services/stockMovementService";
 import ProductThumbnail from "./ProductThumbnail.tsx";
+import { useToast } from "./ToastProvider.tsx";
 
 import "./StockMovements.css";
 
@@ -82,12 +84,11 @@ function getLocalDateString(value: string | Date): string {
 export default function StockMovements({
   canManageStock,
 }: StockMovementsProps) {
+  const notify = useToast();
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   // Stock movement form state
   const [search, setSearch] = useState("");
@@ -105,7 +106,6 @@ export default function StockMovements({
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    setError("");
 
     try {
       const [movementData, productResponse] = await Promise.all([
@@ -136,15 +136,11 @@ export default function StockMovements({
           : "";
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load stock movements."
-      );
+      notify("error", err instanceof Error ? err.message : "Failed to load stock movements.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -234,19 +230,17 @@ export default function StockMovements({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    setSuccess("");
 
     const parsedProductId = Number(productId);
     const parsedQuantity = Number(quantity);
 
     if (!Number.isSafeInteger(parsedProductId) || parsedProductId <= 0) {
-      setError("Please select a valid product.");
+      notify("error", "Please select a valid product.");
       return;
     }
 
     if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity <= 0) {
-      setError("Quantity must be a positive whole number.");
+      notify("error", "Quantity must be a positive whole number.");
       return;
     }
 
@@ -255,7 +249,7 @@ export default function StockMovements({
       selectedProduct &&
       parsedQuantity > selectedProduct.quantity
     ) {
-      setError(
+      notify("error",
         `Insufficient stock. Available quantity: ${selectedProduct.quantity}.`
       );
       return;
@@ -271,7 +265,7 @@ export default function StockMovements({
         reference_note: referenceNote.trim() || undefined,
       });
 
-      setSuccess(
+      notify("success",
         `Stock ${movementType === "IN" ? "received" : "released"} successfully. Remaining quantity: ${result.remaining_quantity}.`
       );
 
@@ -281,11 +275,7 @@ export default function StockMovements({
 
       await loadData();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to record stock movement."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to record stock movement.");
     } finally {
       setSubmitting(false);
     }
@@ -315,18 +305,6 @@ export default function StockMovements({
           Refresh
         </button>
       </header>
-
-      {error && (
-        <div className="sm-alert sm-alert-error" role="alert">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="sm-alert sm-alert-success" role="status">
-          {success}
-        </div>
-      )}
 
       <div className="sm-summary-grid">
         <article className="sm-summary-card">
@@ -465,9 +443,11 @@ export default function StockMovements({
               className="sm-submit-button"
               disabled={submitting || products.length === 0}
             >
-              {submitting
-                ? "Recording..."
-                : `Record Stock ${movementType === "IN" ? "In" : "Out"}`}
+              {submitting ? (
+                <><LoaderCircle size={16} className="sm-spinning" /> Recording...</>
+              ) : (
+                `Record Stock ${movementType === "IN" ? "In" : "Out"}`
+              )}
             </button>
           </div>
         </form>

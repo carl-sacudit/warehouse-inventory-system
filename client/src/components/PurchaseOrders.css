@@ -877,6 +877,10 @@
   align-items: end;
 }
 
+.po-item-fields-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .po-line-total {
   grid-column: 1 / -1;
   display: flex;

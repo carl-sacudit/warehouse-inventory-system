@@ -9,6 +9,9 @@ export interface Product {
   name: string;
   description: string | null;
   image_url?: string | null;
+  supplier_srp: number | string;
+  selling_price: number | string;
+  average_unit_cost: number | string;
   quantity: number;
   unit_price: number | string;
   reorder_level: number;
@@ -21,6 +24,7 @@ export interface Product {
 export interface ProductCategory {
   id: number;
   name: string;
+  product_count?: number;
 }
 
 export interface ProductInput {
@@ -30,8 +34,10 @@ export interface ProductInput {
   name: string;
   description?: string;
   image_url?: string | null;
+  supplier_srp?: number;
   quantity: number;
-  unit_price: number;
+  selling_price: number;
+  average_unit_cost?: number;
   reorder_level: number;
 }
 
@@ -97,6 +103,23 @@ export async function getProducts(): Promise<Product[]> {
 export async function getProductCategories(): Promise<ProductCategory[]> {
   const result = await request<ProductCategory[]>(`${API_URL}/categories`);
   return result.data;
+}
+
+export async function createProductCategory(name: string): Promise<void> {
+  await request<{ id: number }>(`${API_URL}/categories`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateProductCategory(
+  id: number,
+  name: string
+): Promise<void> {
+  await request<unknown>(`${API_URL}/categories/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function createProduct(

@@ -1,7 +1,8 @@
 
 import { useState, type FormEvent } from "react";
-import { Eye, EyeOff, LockKeyhole, Warehouse } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Warehouse, LoaderCircle } from "lucide-react";
 import { authService, type AuthUser } from "../services/authService";
+import { useToast } from "./ToastProvider.tsx";
 import "./Login.css";
 
 interface LoginProps {
@@ -9,26 +10,21 @@ interface LoginProps {
 }
 
 function Login({ onAuthenticated }: LoginProps) {
+  const notify = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
       const user = await authService.login(email.trim(), password);
       onAuthenticated(user);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to sign in. Please try again."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to sign in. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -91,18 +87,14 @@ function Login({ onAuthenticated }: LoginProps) {
             </div>
           </div>
 
-          {error && (
-            <div className="login-error" role="alert">
-              {error}
-            </div>
-          )}
-
           <button
             className="login-submit"
             type="submit"
             disabled={loading}
           >
-            {loading ? "Signing in..." : "Sign in to StockFlow"}
+            {loading ? (
+              <><LoaderCircle size={17} className="action-spinner" /> Signing in...</>
+            ) : "Sign in to StockFlow"}
           </button>
         </form>
 

@@ -13,6 +13,7 @@ export interface PurchaseOrderItemInput {
   product_id: number;
   quantity_ordered: number;
   unit_cost?: number;
+  supplier_srp?: number;
 }
 
 export interface PurchaseOrderInput {
@@ -30,7 +31,11 @@ interface DbRow extends RowDataPacket {
   product_id: number;
   quantity_ordered: number;
   quantity_received: number;
-  unit_price: number;
+  quantity: number;
+  unit_cost: number;
+  average_unit_cost: number;
+  supplier_srp: number;
+  selling_price: number;
   incomplete: number;
 }
 
@@ -85,6 +90,17 @@ function validateItems(items: PurchaseOrderItemInput[]): void {
         "Each unit cost must be a valid non-negative amount."
       );
     }
+
+    if (
+      item.supplier_srp !== undefined &&
+      (!Number.isFinite(item.supplier_srp) ||
+        item.supplier_srp < 0 ||
+        item.supplier_srp > 9999999999.99)
+    ) {
+      throw new PurchaseOrderError(
+        "Each supplier SRP must be a valid non-negative amount."
+      );
+    }
   }
 }
 
@@ -136,6 +152,7 @@ export async function getPurchaseOrder(id: number) {
        poi.quantity_ordered,
        poi.quantity_received,
        poi.unit_cost,
+      poi.supplier_srp,
        poi.line_total
      FROM purchase_order_items poi
      INNER JOIN products p ON p.id = poi.product_id
@@ -230,7 +247,7 @@ export async function createPurchaseOrder(
 
     for (const item of input.items) {
       const [products] = await connection.execute<DbRow[]>(
-        `SELECT id, unit_price
+        `SELECT id, average_unit_cost, supplier_srp
          FROM products
          WHERE id = ?
          FOR UPDATE`,
@@ -245,7 +262,10 @@ export async function createPurchaseOrder(
       }
 
       const rawCost =
-        item.unit_cost ?? Number(products[0].unit_price);
+        item.unit_cost ?? Number(products[0].average_unit_cost);
+      const supplierSrp = Math.round(
+        (item.supplier_srp ?? Number(products[0].supplier_srp)) * 100
+      ) / 100;
 
       if (
         !Number.isFinite(rawCost) ||
@@ -253,6 +273,10 @@ export async function createPurchaseOrder(
         rawCost > 9999999999.99
       ) {
         throw new PurchaseOrderError("Invalid product unit cost.");
+      }
+
+      if (!Number.isFinite(supplierSrp) || supplierSrp < 0) {
+        throw new PurchaseOrderError("Invalid supplier SRP.");
       }
 
       const unitCost = Math.round(rawCost * 100) / 100;
@@ -267,13 +291,14 @@ export async function createPurchaseOrder(
       await connection.execute(
         `INSERT INTO purchase_order_items
           (purchase_order_id, product_id, quantity_ordered,
-           quantity_received, unit_cost, line_total)
-         VALUES (?, ?, ?, 0, ?, ?)`,
+           quantity_received, unit_cost, supplier_srp, line_total)
+         VALUES (?, ?, ?, 0, ?, ?, ?)` ,
         [
           orderId,
           item.product_id,
           item.quantity_ordered,
           unitCost.toFixed(2),
+          supplierSrp.toFixed(2),
           lineTotal.toFixed(2),
         ]
       );
@@ -367,12 +392,13 @@ export async function updateDraftPurchaseOrder(
       product_id: number;
       quantity_ordered: number;
       unit_cost: number;
+      supplier_srp: number;
       line_total: number;
     }[] = [];
 
     for (const item of input.items) {
       const [products] = await connection.execute<DbRow[]>(
-        "SELECT id, unit_price FROM products WHERE id = ? FOR UPDATE",
+        "SELECT id, average_unit_cost, supplier_srp FROM products WHERE id = ? FOR UPDATE",
         [item.product_id]
       );
 
@@ -384,10 +410,16 @@ export async function updateDraftPurchaseOrder(
       }
 
       const unitCost = Math.round(
-        (item.unit_cost ?? Number(products[0].unit_price)) * 100
+        (item.unit_cost ?? Number(products[0].average_unit_cost)) * 100
+      ) / 100;
+      const supplierSrp = Math.round(
+        (item.supplier_srp ?? Number(products[0].supplier_srp)) * 100
       ) / 100;
 
-      if (!Number.isFinite(unitCost) || unitCost < 0) {
+      if (
+        !Number.isFinite(unitCost) || unitCost < 0 ||
+        !Number.isFinite(supplierSrp) || supplierSrp < 0
+      ) {
         throw new PurchaseOrderError("Invalid product unit cost.");
       }
 
@@ -400,6 +432,7 @@ export async function updateDraftPurchaseOrder(
         product_id: item.product_id,
         quantity_ordered: item.quantity_ordered,
         unit_cost: unitCost,
+        supplier_srp: supplierSrp,
         line_total: lineTotal,
       });
     }
@@ -428,13 +461,14 @@ export async function updateDraftPurchaseOrder(
       await connection.execute(
         `INSERT INTO purchase_order_items
           (purchase_order_id, product_id, quantity_ordered,
-           quantity_received, unit_cost, line_total)
-         VALUES (?, ?, ?, 0, ?, ?)`,
+           quantity_received, unit_cost, supplier_srp, line_total)
+         VALUES (?, ?, ?, 0, ?, ?, ?)` ,
         [
           id,
           item.product_id,
           item.quantity_ordered,
           item.unit_cost.toFixed(2),
+          item.supplier_srp.toFixed(2),
           item.line_total.toFixed(2),
         ]
       );
@@ -548,7 +582,8 @@ export async function receivePurchaseOrder(
 
     for (const received of receivedItems) {
       const [items] = await connection.execute<DbRow[]>(
-        `SELECT id, product_id, quantity_ordered, quantity_received
+        `SELECT id, product_id, quantity_ordered, quantity_received, unit_cost,
+          supplier_srp
          FROM purchase_order_items
          WHERE id = ? AND purchase_order_id = ?
          FOR UPDATE`,
@@ -572,9 +607,44 @@ export async function receivePurchaseOrder(
         );
       }
 
+      const [products] = await connection.execute<DbRow[]>(
+        `SELECT id, quantity, average_unit_cost
+         FROM products
+         WHERE id = ?
+         FOR UPDATE`,
+        [item.product_id]
+      );
+
+      if (!products.length) {
+        throw new PurchaseOrderError(
+          `Product ${item.product_id} was not found.`,
+          404
+        );
+      }
+
+      const previousQuantity = Number(products[0].quantity);
+      const nextQuantity = previousQuantity + received.quantity;
+      if (!Number.isSafeInteger(nextQuantity) || nextQuantity > 4294967295) {
+        throw new PurchaseOrderError("The resulting stock quantity is too large.");
+      }
+
+      const nextAverageCost = Math.round(
+        (
+          previousQuantity * Number(products[0].average_unit_cost) +
+          received.quantity * Number(item.unit_cost)
+        ) / nextQuantity * 100
+      ) / 100;
+
       await connection.execute(
-        "UPDATE products SET quantity = quantity + ? WHERE id = ?",
-        [received.quantity, item.product_id]
+        `UPDATE products
+         SET quantity = ?, average_unit_cost = ?, supplier_srp = ?
+         WHERE id = ?`,
+        [
+          nextQuantity,
+          nextAverageCost.toFixed(2),
+          Number(item.supplier_srp).toFixed(2),
+          item.product_id,
+        ]
       );
 
       await connection.execute(

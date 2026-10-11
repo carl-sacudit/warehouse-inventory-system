@@ -1,15 +1,22 @@
 
+import { useMemo } from "react";
 import {
   Search,
   Package,
   Pencil,
   Trash2,
   ArrowUpDown,
+  Tags,
+  LoaderCircle,
 } from "lucide-react";
 import { getProductImageUrl, type Product } from "../services/productService";
 
 interface ProductsTableProps {
   products: Product[];
+  categories: string[];
+  categoryFilter: string;
+  onCategoryFilterChange: (category: string) => void;
+  deletingProductId: number | null;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onEdit: (product: Product) => void;
@@ -21,6 +28,10 @@ interface ProductsTableProps {
 
 function ProductsTable({
   products,
+  categories,
+  categoryFilter,
+  onCategoryFilterChange,
+  deletingProductId,
   searchQuery,
   onSearchChange,
   onEdit,
@@ -29,6 +40,15 @@ function ProductsTable({
   canEdit,
   canDelete,
 }: ProductsTableProps) {
+  const visibleProducts = useMemo(
+    () => categoryFilter
+      ? products.filter(
+          (product) => (product.category_name || "Uncategorized") === categoryFilter
+        )
+      : products,
+    [products, categoryFilter]
+  );
+
   const formatCurrency = (value: number | string) => {
     return new Intl.NumberFormat("en-PH", {
       style: "currency",
@@ -59,6 +79,7 @@ function ProductsTable({
   };
 
   const hasActions = canEdit || canDelete;
+  const columnCount = hasActions ? 9 : 8;
 
   return (
     <section className="products-panel">
@@ -70,7 +91,7 @@ function ProductsTable({
 
         <div className="products-count">
           <Package size={16} />
-          <span>{products.length} products</span>
+          <span>{visibleProducts.length} products</span>
         </div>
       </div>
 
@@ -89,9 +110,27 @@ function ProductsTable({
           />
         </div>
 
-        <div className="products-toolbar-label">
-          <ArrowUpDown size={15} />
-          <span>Inventory list</span>
+        <div className="products-toolbar-right">
+          <label className="products-category-filter">
+            <Tags size={15} />
+            <select
+              value={categoryFilter}
+              onChange={(event) => onCategoryFilterChange(event.target.value)}
+              aria-label="Filter products by category"
+            >
+              <option value="">All categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="products-toolbar-label">
+            <ArrowUpDown size={15} />
+            <span>Inventory list</span>
+          </div>
         </div>
       </div>
 
@@ -104,7 +143,8 @@ function ProductsTable({
               <th>Category</th>
               <th>Supplier / Source</th>
               <th>Quantity</th>
-              <th>Unit Price</th>
+              <th>Supplier SRP</th>
+              <th>Selling Price</th>
               <th>Status</th>
               {hasActions && (
                 <th className="actions-heading">Actions</th>
@@ -115,25 +155,29 @@ function ProductsTable({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={hasActions ? 7 : 6} className="table-message">
+                <td colSpan={columnCount} className="table-message">
                   <span className="loading-spinner" />
                   Loading inventory...
                 </td>
               </tr>
-            ) : products.length === 0 ? (
+            ) : visibleProducts.length === 0 ? (
               <tr>
-                <td colSpan={hasActions ? 7 : 6} className="table-message">
+                <td colSpan={columnCount} className="table-message">
                   <div className="empty-products">
                     <Package size={32} />
-                    <strong>No products found</strong>
+                    <strong>
+                      {categoryFilter ? "No products in this category" : "No products found"}
+                    </strong>
                     <span>
-                      Try another search or add a new product.
+                      {categoryFilter
+                        ? "Choose another category or show all categories."
+                        : "Try another search or add a new product."}
                     </span>
                   </div>
                 </td>
               </tr>
             ) : (
-              products.map((product) => {
+              visibleProducts.map((product) => {
                 const status = getStockStatus(product);
 
                 return (
@@ -191,7 +235,13 @@ function ProductsTable({
 
                     <td>
                       <span className="product-price">
-                        {formatCurrency(product.unit_price)}
+                        {formatCurrency(product.supplier_srp)}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="product-price">
+                        {formatCurrency(product.selling_price)}
                       </span>
                     </td>
 
@@ -225,9 +275,14 @@ function ProductsTable({
                               className="table-action-button delete-action"
                               title={`Delete ${product.name}`}
                               aria-label={`Delete ${product.name}`}
+                              disabled={deletingProductId !== null}
                               onClick={() => onDelete(product)}
                             >
-                              <Trash2 size={16} />
+                              {deletingProductId === product.id ? (
+                                <LoaderCircle size={16} className="action-spinner" />
+                              ) : (
+                                <Trash2 size={16} />
+                              )}
                             </button>
                           )}
                         </div>
@@ -243,8 +298,8 @@ function ProductsTable({
 
       <div className="products-panel-footer">
         <span>
-          Showing {products.length}{" "}
-          {products.length === 1 ? "product" : "products"}
+          Showing {visibleProducts.length}{" "}
+          {visibleProducts.length === 1 ? "product" : "products"}
         </span>
         <span>StockFlow Inventory</span>
       </div>

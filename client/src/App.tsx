@@ -1,10 +1,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Package,
-  Boxes,
-  Wallet,
-  AlertTriangle,
   Plus,
   Bell,
   Menu,
@@ -13,13 +9,17 @@ import {
 } from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
-import StatCard from "./components/StatCard";
+import Dashboard from "./components/Dashboard";
 import ProductsTable from "./components/ProductsTable";
 import ProductModal from "./components/ProductModal";
 import Login from "./components/Login";
 import StockMovements from "./components/StockMovements";
 import Suppliers from "./components/Suppliers";
 import PurchaseOrders from "./components/PurchaseOrders";
+import SalesOrders from "./components/SalesOrders";
+import ProductThumbnail from "./components/ProductThumbnail.tsx";
+import Categories from "./components/Categories.tsx";
+import { useToast } from "./components/ToastProvider.tsx";
 
 import { authService, type AuthUser } from "./services/authService";
 
@@ -35,15 +35,16 @@ import {
 import "./App.css";
 
 function App() {
+  const notify = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
-
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [activePage, setActivePage] = useState("Dashboard");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,7 +52,7 @@ function App() {
     useState<Product | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Role permissions
   const canManageSuppliers =
@@ -110,13 +111,11 @@ function App() {
       setLoading(true);
     }
 
-    setError("");
-
     try {
       const data = await getProducts();
       setProducts(data);
     } catch (err) {
-      setError(
+      notify("error",
         err instanceof Error
           ? err.message
           : "Unable to load inventory products."
@@ -125,7 +124,7 @@ function App() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -151,61 +150,39 @@ function App() {
     });
   }, [products, searchQuery]);
 
-  const totalProducts = products.length;
-
-  const totalUnits = products.reduce(
-    (total, product) => total + Number(product.quantity || 0),
-    0
+  const productCategories = useMemo(
+    () => [...new Set(products.map((product) => product.category_name || "Uncategorized"))]
+      .sort((first, second) => first.localeCompare(second)),
+    [products]
   );
 
-  const inventoryValue = products.reduce(
-    (total, product) =>
-      total +
-      Number(product.quantity || 0) *
-        Number(product.unit_price || 0),
-    0
+  const lowStockProducts = useMemo(
+    () => products
+      .filter(
+        (product) => Number(product.quantity) <= Number(product.reorder_level)
+      )
+      .sort(
+        (first, second) => Number(first.quantity) - Number(second.quantity)
+      ),
+    [products]
   );
-
-  const lowStockProducts = products
-    .filter(
-      (product) =>
-        Number(product.quantity) <= Number(product.reorder_level)
-    )
-    .sort(
-      (a, b) =>
-        Number(a.quantity) - Number(b.quantity)
-    );
-
-  const lowStockCount = lowStockProducts.length;
-
-  const formatNumber = (value: number) =>
-    new Intl.NumberFormat("en-PH").format(value);
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-      maximumFractionDigits: 2,
-    }).format(value);
 
   const openCreateModal = () => {
     if (!canManageProducts) {
-      setError("You do not have permission to create products.");
+      notify("error", "You do not have permission to create products.");
       return;
     }
 
-    setError("");
     setSelectedProduct(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (product: Product) => {
     if (!canManageProducts) {
-      setError("You do not have permission to edit products.");
+      notify("error", "You do not have permission to edit products.");
       return;
     }
 
-    setError("");
     setSelectedProduct(product);
     setIsModalOpen(true);
   };
@@ -217,37 +194,29 @@ function App() {
 
   const handleSaveProduct = async (data: ProductInput) => {
     if (!canManageProducts) {
-      setError("You do not have permission to modify products.");
+      notify("error", "You do not have permission to modify products.");
       return;
     }
 
     try {
-      setError("");
-      setNotice("");
-
       if (selectedProduct) {
         await updateProduct(selectedProduct.id, data);
-        setNotice("Product updated successfully.");
+        notify("success", "Product updated successfully.");
       } else {
         await createProduct(data);
-        setNotice("Product created successfully.");
+        notify("success", "Product created successfully.");
       }
 
       closeModal();
       await loadProducts(true);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save the product."
-      );
       throw err;
     }
   };
 
   const handleDeleteProduct = async (product: Product) => {
     if (!canDeleteProducts) {
-      setError("Only administrators can delete products.");
+      notify("error", "Only administrators can delete products.");
       return;
     }
 
@@ -257,58 +226,67 @@ function App() {
 
     if (!confirmed) return;
 
-    setError("");
-    setNotice("");
-
+    setDeletingProductId(product.id);
     try {
       await deleteProduct(product.id);
-      setNotice("Product deleted successfully.");
+      notify("success", "Product deleted successfully.");
       await loadProducts(true);
     } catch (err) {
-      setError(
+      notify("error",
         err instanceof Error
           ? err.message
           : "Unable to delete the product."
       );
+    } finally {
+      setDeletingProductId(null);
     }
   };
 
   const handleNavigate = (page: string) => {
     setActivePage(page);
     setSearchQuery("");
-    setError("");
-    setNotice("");
+    setCategoryFilter("");
     setSidebarOpen(false);
 
     const availablePages = [
       "Dashboard",
       "Products",
+      "Categories",
       "Stock Movements",
       "Suppliers",
       "Purchase Orders",
+      "Sales Orders",
     ];
 
     if (!availablePages.includes(page)) {
-      setNotice(`${page} module is coming soon.`);
+      notify("info", `${page} module is coming soon.`);
     }
   };
 
+  const handleViewCategoryProducts = (categoryName: string) => {
+    setActivePage("Products");
+    setSearchQuery("");
+    setCategoryFilter(categoryName);
+    setSidebarOpen(false);
+  };
+
   const handleLogout = async () => {
+    setLoggingOut(true);
     try {
       await authService.logout();
     } catch (error) {
       console.error("Logout failed:", error);
+      notify("error", "Unable to log out cleanly. Please try again.");
     } finally {
       setUser(null);
       setProducts([]);
       setLoading(false);
       setRefreshing(false);
-      setError("");
       setSearchQuery("");
       setSelectedProduct(null);
       setIsModalOpen(false);
       setActivePage("Dashboard");
-      setNotice("");
+      setLoggingOut(false);
     }
   };
 
@@ -332,11 +310,14 @@ function App() {
   const isSuppliersPage =
     activePage === "Suppliers";
 
+  const isCategoriesPage =
+    activePage === "Categories";
+
   const isPurchaseOrdersPage =
     activePage === "Purchase Orders";
 
-  const isProductsPage =
-    activePage === "Products";
+  const isSalesOrdersPage =
+    activePage === "Sales Orders";
 
   const isDashboardPage =
     activePage === "Dashboard";
@@ -350,6 +331,7 @@ function App() {
         onClose={() => setSidebarOpen(false)}
         user={user}
         onLogout={() => void handleLogout()}
+        isLoggingOut={loggingOut}
       />
 
       <main className="main-content">
@@ -382,9 +364,7 @@ function App() {
               className="notification-button"
               aria-label="Notifications"
               title="Notifications"
-              onClick={() =>
-                setNotice("You are all caught up on notifications.")
-              }
+              onClick={() => notify("info", "You are all caught up on notifications.")}
             >
               <Bell size={19} />
             </button>
@@ -410,9 +390,25 @@ function App() {
               canManageSuppliers={canManageSuppliers}
               canDeleteSuppliers={canDeleteSuppliers}
             />
+          ) : isCategoriesPage ? (
+            <Categories
+              canManageCategories={canManageProducts}
+              onViewProducts={handleViewCategoryProducts}
+            />
           ) : isPurchaseOrdersPage ? (
             <PurchaseOrders
               canManagePurchaseOrders={canManagePurchaseOrders}
+            />
+          ) : isSalesOrdersPage ? (
+            <SalesOrders />
+          ) : isDashboardPage ? (
+            <Dashboard
+              products={products}
+              productsLoading={loading}
+              canManageProducts={canManageProducts}
+              onAddProduct={openCreateModal}
+              onRefreshProducts={() => loadProducts(true)}
+              onNavigate={handleNavigate}
             />
           ) : (
             <>
@@ -423,16 +419,10 @@ function App() {
                     WAREHOUSE OVERVIEW
                   </div>
 
-                  <h1>
-                    {isDashboardPage
-                      ? "Inventory Dashboard"
-                      : activePage}
-                  </h1>
+                  <h1>{activePage}</h1>
 
                   <p>
-                    {isProductsPage
-                      ? "Manage warehouse products, prices, and inventory levels."
-                      : "Monitor your stock, track inventory levels, and manage warehouse products in one place."}
+                    Manage warehouse products, prices, and inventory levels.
                   </p>
                 </div>
 
@@ -465,166 +455,57 @@ function App() {
                 </div>
               </section>
 
-              {error && (
-                <div
-                  className="app-alert app-alert-error"
-                  role="alert"
-                >
-                  <AlertTriangle size={19} />
-
-                  <div>
-                    <strong>Something went wrong</strong>
-                    <p>{error}</p>
+              {lowStockProducts.length > 0 && (
+                <section className="low-stock-panel" aria-labelledby="products-low-stock-title">
+                  <div className="low-stock-panel-header">
+                    <div>
+                      <h2 id="products-low-stock-title">Low stock alerts</h2>
+                      <p>Products at or below their reorder level.</p>
+                    </div>
+                    <span className="low-stock-count">
+                      {lowStockProducts.length} {lowStockProducts.length === 1 ? "item" : "items"}
+                    </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => void loadProducts(true)}
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              {notice && (
-                <div
-                  className="app-alert app-alert-info"
-                  role="status"
-                >
-                  <span>{notice}</span>
-
-                  <button
-                    type="button"
-                    aria-label="Dismiss message"
-                    onClick={() => setNotice("")}
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-
-              {isDashboardPage && (
-                <>
-                  <section className="stats-grid">
-                    <StatCard
-                      title="Total Products"
-                      value={
-                        loading
-                          ? "—"
-                          : formatNumber(totalProducts)
-                      }
-                      subtitle="Registered inventory items"
-                      icon={Package}
-                      color="blue"
-                    />
-
-                    <StatCard
-                      title="Total Units"
-                      value={
-                        loading
-                          ? "—"
-                          : formatNumber(totalUnits)
-                      }
-                      subtitle="Units currently in stock"
-                      icon={Boxes}
-                      color="green"
-                    />
-
-                    <StatCard
-                      title="Inventory Value"
-                      value={
-                        loading
-                          ? "—"
-                          : formatCurrency(inventoryValue)
-                      }
-                      subtitle="Estimated value of current stock"
-                      icon={Wallet}
-                      color="purple"
-                    />
-
-                    <StatCard
-                      title="Low Stock"
-                      value={
-                        loading
-                          ? "—"
-                          : formatNumber(lowStockCount)
-                      }
-                      subtitle="Items at or below reorder level"
-                      icon={AlertTriangle}
-                      color="orange"
-                    />
-                  </section>
-
-                  {lowStockProducts.length > 0 && (
-                    <section className="low-stock-panel">
-                      <div className="low-stock-panel-header">
-                        <div>
-                          <h2>Low-Stock Alerts</h2>
-                          <p>
-                            Products that need replenishment
-                          </p>
+                  <div className="low-stock-list">
+                    {lowStockProducts.map((product) => (
+                      <article className="low-stock-item" key={product.id}>
+                        <div className="low-stock-product-info">
+                          <ProductThumbnail
+                            imageUrl={product.image_url}
+                            className="low-stock-thumb"
+                          />
+                          <div className="low-stock-product-copy">
+                            <strong>{product.name}</strong>
+                            <span>SKU: {product.sku}</span>
+                          </div>
                         </div>
 
-                        <span className="low-stock-count">
-                          {lowStockProducts.length}{" "}
-                          {lowStockProducts.length === 1
-                            ? "item"
-                            : "items"}
+                        <div className="low-stock-quantity">
+                          <span>Current stock</span>
+                          <strong>{product.quantity} units</strong>
+                        </div>
+
+                        <div className="low-stock-reorder">
+                          <span>Reorder level</span>
+                          <strong>{product.reorder_level} units</strong>
+                        </div>
+
+                        <span className="low-stock-badge">
+                          {Number(product.quantity) === 0 ? "Out of stock" : "Low stock"}
                         </span>
-                      </div>
-
-                      <div className="low-stock-table-wrapper">
-                        <table className="low-stock-table">
-                          <thead>
-                            <tr>
-                              <th>Product</th>
-                              <th>Current Stock</th>
-                              <th>Reorder Level</th>
-                              <th>Status</th>
-                            </tr>
-                          </thead>
-
-                          <tbody>
-                            {lowStockProducts.map((product) => (
-                              <tr key={product.id}>
-                                <td>
-                                  <div className="low-stock-product-info">
-                                    <strong>{product.name}</strong>
-                                    <span>
-                                      SKU: {product.sku}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                <td>
-                                  <strong>
-                                    {product.quantity}
-                                  </strong>
-                                </td>
-
-                                <td>
-                                  {product.reorder_level}
-                                </td>
-
-                                <td>
-                                  <span className="low-stock-badge">
-                                    {Number(product.quantity) === 0
-                                      ? "Out of Stock"
-                                      : "Low Stock"}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </section>
-                  )}
-                </>
+                      </article>
+                    ))}
+                  </div>
+                </section>
               )}
 
               <ProductsTable
                 products={filteredProducts}
+                categories={productCategories}
+                categoryFilter={categoryFilter}
+                onCategoryFilterChange={setCategoryFilter}
+                deletingProductId={deletingProductId}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 onEdit={openEditModal}

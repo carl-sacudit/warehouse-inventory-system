@@ -12,6 +12,7 @@ import {
   UserRound,
   X,
   AlertTriangle,
+  LoaderCircle,
 } from "lucide-react";
 import {
   getSuppliers,
@@ -23,6 +24,7 @@ import type {
   Supplier,
   SupplierInput,
 } from "../services/supplierService";
+import { useToast } from "./ToastProvider.tsx";
 import "./Suppliers.css";
 
 
@@ -43,12 +45,12 @@ function Suppliers({
   canManageSuppliers,
   canDeleteSuppliers,
 }: SuppliersProps) {
+  const notify = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -58,17 +60,11 @@ function Suppliers({
 
   async function loadSuppliers() {
     setLoading(true);
-    setError("");
-
     try {
       const data = await getSuppliers();
       setSuppliers(data);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load suppliers."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to load suppliers.");
     } finally {
       setLoading(false);
     }
@@ -79,8 +75,6 @@ useEffect(() => {
 
   async function fetchSuppliers() {
     try {
-      setError("");
-
       const data = await getSuppliers();
 
       if (!ignore) {
@@ -88,11 +82,7 @@ useEffect(() => {
       }
     } catch (err) {
       if (!ignore) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load suppliers."
-        );
+        notify("error", err instanceof Error ? err.message : "Unable to load suppliers.");
       }
     } finally {
       if (!ignore) {
@@ -106,7 +96,7 @@ useEffect(() => {
   return () => {
     ignore = true;
   };
-}, []);
+}, [notify]);
 
   const filteredSuppliers = suppliers.filter((supplier) => {
     const query = searchQuery.trim().toLowerCase();
@@ -128,7 +118,6 @@ useEffect(() => {
     setEditingSupplier(null);
     setForm({ ...EMPTY_FORM });
     setError("");
-    setNotice("");
     setModalOpen(true);
   }
 
@@ -142,7 +131,6 @@ useEffect(() => {
       address: supplier.address || "",
     });
     setError("");
-    setNotice("");
     setModalOpen(true);
   }
 
@@ -169,7 +157,6 @@ useEffect(() => {
   ) {
     event.preventDefault();
     setError("");
-    setNotice("");
 
     const input: SupplierInput = {
       name: form.name.trim(),
@@ -189,10 +176,10 @@ useEffect(() => {
     try {
       if (editingSupplier) {
         await updateSupplier(editingSupplier.id, input);
-        setNotice("Supplier updated successfully.");
+        notify("success", "Supplier updated successfully.");
       } else {
         await createSupplier(input);
-        setNotice("Supplier added successfully.");
+        notify("success", "Supplier added successfully.");
       }
 
       setModalOpen(false);
@@ -200,11 +187,7 @@ useEffect(() => {
       setForm({ ...EMPTY_FORM });
       await loadSuppliers();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save supplier."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to save supplier.");
     } finally {
       setSaving(false);
     }
@@ -213,7 +196,6 @@ useEffect(() => {
   function openDeleteModal(supplier: Supplier) {
     setSupplierToDelete(supplier);
     setError("");
-    setNotice("");
   }
 
   function closeDeleteModal() {
@@ -226,20 +208,15 @@ useEffect(() => {
 
     const supplier = supplierToDelete;
     setError("");
-    setNotice("");
     setDeleting(true);
 
     try {
       await deleteSupplier(supplier.id);
-      setNotice(`"${supplier.name}" was deleted successfully.`);
+      notify("success", `"${supplier.name}" was deleted successfully.`);
       setSupplierToDelete(null);
       await loadSuppliers();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete supplier."
-      );
+      notify("error", err instanceof Error ? err.message : "Unable to delete supplier.");
     } finally {
       setDeleting(false);
     }
@@ -297,18 +274,6 @@ useEffect(() => {
             <span>Supplier directory</span>
           </div>
         </div>
-
-        {error && !modalOpen && !supplierToDelete && (
-          <div className="suppliers-message suppliers-error" role="alert">
-            {error}
-          </div>
-        )}
-
-        {notice && !modalOpen && (
-          <div className="suppliers-message suppliers-success" role="status">
-            {notice}
-          </div>
-        )}
 
         <div className="suppliers-table-wrapper">
           <table className="suppliers-table">
@@ -595,7 +560,7 @@ useEffect(() => {
                   disabled={saving}
                 >
                   {saving
-                    ? "Saving..."
+                    ? <><LoaderCircle size={16} className="action-spinner" /> Saving...</>
                     : editingSupplier
                       ? "Save Changes"
                       : "Create Supplier"}
@@ -628,11 +593,6 @@ useEffect(() => {
               Are you sure you want to delete <strong>{supplierToDelete.name}</strong>?
               This action cannot be undone.
             </p>
-            {error && (
-              <div className="supplier-delete-error" role="alert">
-                {error}
-              </div>
-            )}
             <div className="supplier-delete-actions">
               <button
                 type="button"
@@ -648,7 +608,7 @@ useEffect(() => {
                 onClick={() => void handleDelete()}
                 disabled={deleting}
               >
-                {deleting && <span className="supplier-delete-spinner" aria-hidden="true" />}
+                {deleting && <LoaderCircle size={16} className="action-spinner" aria-hidden="true" />}
                 {deleting ? "Deleting..." : "Delete supplier"}
               </button>
             </div>

@@ -12,6 +12,7 @@ import authRoutes from "./routes/auth.routes.js";
 import stockMovementRoutes from "./routes/stockMovement.routes.js";
 import supplierRoutes from "./routes/supplier.routes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrder.routes.js";
+import salesOrderRoutes from "./routes/salesOrder.routes.js";
 const app = express();
 const uploadDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -34,6 +35,7 @@ app.use("/uploads", express.static(uploadDirectory));
 app.use("/api/stock-movements", stockMovementRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
+app.use("/api/sales-orders", salesOrderRoutes);
 // API health check
 app.get("/api/health", (_req, res) => {
   res.json({

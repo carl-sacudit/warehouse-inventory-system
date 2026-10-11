@@ -697,8 +697,45 @@ button {
   outline: none;
 }
 
+.products-toolbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.products-category-filter {
+  display: inline-flex;
+  min-width: 170px;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #e3e8f1;
+  border-radius: 7px;
+  background: #fff;
+  color: #7d8997;
+}
+
+.products-category-filter:focus-within {
+  border-color: #a8bcff;
+  box-shadow: 0 0 0 3px rgba(53, 99, 233, 0.07);
+}
+
+.products-category-filter select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #536176;
+  font-size: 10px;
+}
+
 .products-toolbar-label {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 7px;
   color: #8b97aa;
@@ -829,6 +866,14 @@ button {
   position: absolute;
   top: 5px;
   right: 5px;
+}
+
+.action-spinner {
+  animation: product-action-spin 900ms linear infinite;
+}
+
+@keyframes product-action-spin {
+  to { transform: rotate(360deg); }
 }
 
 .product-name-info {
@@ -1432,6 +1477,14 @@ button {
     width: 100%;
   }
 
+  .products-toolbar-right {
+    justify-content: flex-start;
+  }
+
+  .products-category-filter {
+    width: 100%;
+  }
+
   .products-toolbar-label {
     display: none;
   }
@@ -1560,14 +1613,34 @@ button {
 ======================================== */
 
 .low-stock-panel {
-  width: 1068px;
-  margin: 24px 0 32px;
-  padding: 24px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px;
   background: #ffffff;
   border: 1px solid #e7edf5;
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.035);
   box-sizing: border-box;
+}
+
+.low-stock-item .low-stock-product-info {
+  align-items: center;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.low-stock-product-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.product-thumbnail.low-stock-thumb {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 6px;
 }
 
 .low-stock-panel-header {

@@ -6,11 +6,13 @@ import {
   Truck,
   ArrowLeftRight,
   ClipboardList,
+  ShoppingBag,
   Settings,
   Warehouse,
   X,
   LogOut,
   Users,
+  LoaderCircle,
 } from "lucide-react";
 
 import type { AuthUser } from "../services/authService";
@@ -22,6 +24,7 @@ interface SidebarProps {
   onClose: () => void;
   user: AuthUser;
   onLogout: () => void;
+  isLoggingOut: boolean;
 }
 
 interface NavigationItem {
@@ -78,6 +81,11 @@ const navigationItems: NavigationSection[] = [
         allowedRoles: ALL_ROLES,
       },
       {
+        label: "Sales Orders",
+        icon: ShoppingBag,
+        allowedRoles: ALL_ROLES,
+      },
+      {
         label: "Stock Movements",
         icon: ArrowLeftRight,
         allowedRoles: ALL_ROLES,
@@ -127,6 +135,7 @@ function Sidebar({
   onClose,
   user,
   onLogout,
+  isLoggingOut,
 }: SidebarProps) {
   const visibleSections = navigationItems
     .map((section) => ({
@@ -237,8 +246,9 @@ function Sidebar({
             onClick={onLogout}
             aria-label="Log out"
             title="Log out"
+            disabled={isLoggingOut}
           >
-            <LogOut size={17} />
+            {isLoggingOut ? <LoaderCircle size={17} className="action-spinner" /> : <LogOut size={17} />}
           </button>
 
           <span className="sidebar-status-dot" />

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { X, Package, Save, Trash2 } from "lucide-react";
+import { X, Package, Save, Trash2, LoaderCircle } from "lucide-react";
 import {
   getProductCategories,
   getProductImageUrl,
@@ -12,6 +12,7 @@ import type {
   ProductInput,
 } from "../services/productService";
 import type { Supplier } from "../services/supplierService";
+import { useToast } from "./ToastProvider.tsx";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -28,7 +29,8 @@ interface ProductForm {
   description: string;
   image_url: string;
   quantity: string;
-  unit_price: string;
+  supplier_srp: string;
+  selling_price: string;
   reorder_level: string;
 }
 
@@ -40,7 +42,8 @@ const EMPTY_FORM: ProductForm = {
   description: "",
   image_url: "",
   quantity: "0",
-  unit_price: "0.00",
+  supplier_srp: "0.00",
+  selling_price: "0.00",
   reorder_level: "10",
 };
 
@@ -73,6 +76,7 @@ function ProductModalForm({
   onClose,
   onSubmit,
 }: ProductModalFormProps) {
+  const notify = useToast();
   const [form, setForm] = useState<ProductForm>(() =>
     product
       ? {
@@ -83,7 +87,8 @@ function ProductModalForm({
           description: product.description ?? "",
           image_url: product.image_url ?? "",
           quantity: String(product.quantity),
-          unit_price: String(product.unit_price),
+          supplier_srp: String(product.supplier_srp ?? 0),
+          selling_price: String(product.selling_price ?? product.unit_price),
           reorder_level: String(product.reorder_level),
         }
       : { ...EMPTY_FORM }
@@ -101,15 +106,10 @@ function ProductModalForm({
   const [suppliersLoading, setSuppliersLoading] = useState(true);
 
   useEffect(() => {
-    if (!imageFile) {
-      setLocalImagePreview("");
-      return;
-    }
-
-    const previewUrl = URL.createObjectURL(imageFile);
-    setLocalImagePreview(previewUrl);
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [imageFile]);
+    return () => {
+      if (localImagePreview) URL.revokeObjectURL(localImagePreview);
+    };
+  }, [localImagePreview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,11 +191,13 @@ function ProductModalForm({
     }
 
     setImageFile(file);
+    setLocalImagePreview(URL.createObjectURL(file));
     setError("");
   };
 
   const handleRemoveImage = () => {
     setImageFile(null);
+    setLocalImagePreview("");
     setForm((previous) => ({ ...previous, image_url: "" }));
   };
 
@@ -206,7 +208,8 @@ function ProductModalForm({
     setError("");
 
     const quantity = Number(form.quantity);
-    const unitPrice = Number(form.unit_price);
+    const supplierSrp = Number(form.supplier_srp);
+    const sellingPrice = Number(form.selling_price);
     const reorderLevel = Number(form.reorder_level);
 
     if (!form.sku.trim() || !form.name.trim()) {
@@ -226,8 +229,11 @@ function ProductModalForm({
       return;
     }
 
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      setError("Unit price must be a valid non-negative number.");
+    if (
+      !Number.isFinite(supplierSrp) || supplierSrp < 0 ||
+      !Number.isFinite(sellingPrice) || sellingPrice < 0
+    ) {
+      setError("SRP and selling price must be valid non-negative amounts.");
       return;
     }
 
@@ -245,14 +251,15 @@ function ProductModalForm({
         name: form.name.trim(),
         description: form.description.trim(),
         image_url: imageUrl,
+        supplier_srp: supplierSrp,
         quantity,
-        unit_price: unitPrice,
+        selling_price: sellingPrice,
         reorder_level: reorderLevel,
       });
 
       onClose();
     } catch (err) {
-      setError(
+      notify("error",
         err instanceof Error
           ? err.message
           : "Unable to save the product."
@@ -458,8 +465,7 @@ function ProductModalForm({
                 <div className="product-image-preview">
                   <img
                     src={
-                      localImagePreview ||
-                      getProductImageUrl(form.image_url)
+                      localImagePreview || getProductImageUrl(form.image_url)
                     }
                     alt="Product preview"
                   />
@@ -495,8 +501,12 @@ function ProductModalForm({
                   onChange={(event) =>
                     updateField("quantity", event.target.value)
                   }
+                  readOnly={Boolean(product)}
                   required
                 />
+                {product && (
+                  <small>Use a purchase order or stock movement to change current stock.</small>
+                )}
               </div>
 
               <div className="form-field">
@@ -517,24 +527,45 @@ function ProductModalForm({
               </div>
 
               <div className="form-field form-field-full">
-                <label htmlFor="product-price">
-                  Unit Price (PHP) <span>*</span>
+                <label htmlFor="product-selling-price">
+                  Selling Price (PHP) <span>*</span>
                 </label>
                 <div className="price-input-wrapper">
                   <span>₱</span>
                   <input
-                    id="product-price"
+                    id="product-selling-price"
                     type="number"
                     min="0"
                     step="0.01"
-                    value={form.unit_price}
+                    value={form.selling_price}
                     onChange={(event) =>
-                      updateField("unit_price", event.target.value)
+                      updateField("selling_price", event.target.value)
                     }
                     required
                   />
                 </div>
               </div>
+
+              <div className="form-field form-field-full">
+                <label htmlFor="product-srp">
+                  Supplier SRP (PHP) <span>*</span>
+                </label>
+                <div className="price-input-wrapper">
+                  <span>₱</span>
+                  <input
+                    id="product-srp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.supplier_srp}
+                    onChange={(event) =>
+                      updateField("supplier_srp", event.target.value)
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -553,7 +584,7 @@ function ProductModalForm({
               className="button-primary"
               disabled={saving}
             >
-              <Save size={17} />
+              {saving ? <LoaderCircle size={17} className="action-spinner" /> : <Save size={17} />}
               {saving
                 ? "Saving..."
                 : isEditing
