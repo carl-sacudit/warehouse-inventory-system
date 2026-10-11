@@ -241,6 +241,7 @@ function App() {
           ? err.message
           : "Unable to save the product."
       );
+      throw err;
     }
   };
 

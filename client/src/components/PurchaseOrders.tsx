@@ -42,6 +42,7 @@ import {
   getProducts,
   type Product,
 } from "../services/productService";
+import ProductThumbnail from "./ProductThumbnail.tsx";
 
 import "./PurchaseOrders.css";
 
@@ -1221,13 +1222,22 @@ useEffect(() => {
                                   );
                                 })}
                               </select>
-
-                              {selectedProduct && (
-                                <small>
-                                  Current stock: {selectedProduct.quantity}
-                                </small>
-                              )}
                             </label>
+
+                            {selectedProduct && (
+                              <div className="po-product-choice">
+                                <ProductThumbnail
+                                  imageUrl={selectedProduct.image_url}
+                                  className="po-product-thumb"
+                                />
+                                <div>
+                                  <strong>{selectedProduct.name}</strong>
+                                  <small>
+                                    {selectedProduct.sku} · Current stock: {selectedProduct.quantity}
+                                  </small>
+                                </div>
+                              </div>
+                            )}
 
                             <div className="po-item-fields-grid">
                               <label className="po-form-field">
@@ -1382,13 +1392,22 @@ useEffect(() => {
                     const ordered = Number(item.quantity_ordered);
                     const previouslyReceived = Number(item.quantity_received);
                     const remaining = ordered - previouslyReceived;
+                    const product = products.find(
+                      (productOption) => productOption.id === item.product_id
+                    );
 
                     return (
                       <div className="po-receive-item" key={item.id}>
                         <div className="po-receive-item-heading">
-                          <div>
+                          <div className="po-receive-item-product">
+                            <ProductThumbnail
+                              imageUrl={product?.image_url}
+                              className="po-product-thumb"
+                            />
+                            <div>
                             <strong>{item.product_name}</strong>
                             <small>{item.sku}</small>
+                            </div>
                           </div>
 
                           <span className="po-receive-remaining">

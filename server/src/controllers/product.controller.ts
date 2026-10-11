@@ -16,6 +16,19 @@ interface Product extends RowDataPacket {
   supplier_name?: string | null;
 }
 
+const DEFAULT_CATEGORIES = [
+  "Hardware & Construction Supplies",
+  "Building Materials",
+  "Tools & Equipment",
+  "Electrical Supplies",
+  "Plumbing Supplies",
+  "Fasteners & Fixings",
+  "Safety & PPE",
+  "Electronics",
+  "Office Supplies",
+  "Packaging Materials",
+];
+
 export const getProducts = async (_req: Request, res: Response) => {
   try {
     const [rows] = await pool.query<Product[]>(
@@ -30,6 +43,39 @@ export const getProducts = async (_req: Request, res: Response) => {
   } catch (error) {
     console.error("Get products error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch products." });
+  }
+};
+
+export const getCategories = async (_req: Request, res: Response) => {
+  try {
+    const categorySelects = DEFAULT_CATEGORIES.map(
+      (_category, index) =>
+        index === 0 ? "SELECT ? AS name" : "SELECT ?"
+    ).join(" UNION ALL ");
+
+    await pool.query(
+      `INSERT INTO categories (name)
+       SELECT defaults.name
+       FROM (${categorySelects}) AS defaults
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM categories AS existing
+         WHERE existing.name = defaults.name
+       )`,
+      DEFAULT_CATEGORIES
+    );
+
+    const [rows] = await pool.query<(RowDataPacket & { id: number; name: string })[]>(
+      "SELECT id, name FROM categories ORDER BY name ASC"
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Get categories error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch product categories.",
+    });
   }
 };
 
@@ -56,6 +102,18 @@ export const getProductById = async (req: Request, res: Response) => {
   }
 };
 
+export const saveProductImage = (req: Request, res: Response) => {
+  if (!req.file) {
+    res.status(400).json({ success: false, message: "Choose an image to upload." });
+    return;
+  }
+
+  res.status(201).json({
+    success: true,
+    data: { image_url: `/uploads/${req.file.filename}` },
+  });
+};
+
 export const createProduct = async (req: Request, res: Response) => {
   const {
     category_id,
@@ -63,6 +121,7 @@ export const createProduct = async (req: Request, res: Response) => {
     sku,
     name,
     description,
+    image_url,
     quantity = 0,
     unit_price = 0,
     reorder_level = 10,
@@ -79,14 +138,15 @@ export const createProduct = async (req: Request, res: Response) => {
   try {
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO products
-       (category_id, supplier_id, sku, name, description, quantity, unit_price, reorder_level)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (category_id, supplier_id, sku, name, description, image_url, quantity, unit_price, reorder_level)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         category_id || null,
         supplier_id || null,
         sku.trim(),
         name.trim(),
         description || null,
+        image_url?.trim() || null,
         quantity,
         unit_price,
         reorder_level,
@@ -120,6 +180,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     sku,
     name,
     description,
+    image_url,
     quantity,
     unit_price,
     reorder_level,
@@ -137,7 +198,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     const [result] = await pool.execute<ResultSetHeader>(
       `UPDATE products
        SET category_id = ?, supplier_id = ?, sku = ?, name = ?,
-           description = ?, quantity = ?, unit_price = ?, reorder_level = ?
+           description = ?, image_url = ?, quantity = ?, unit_price = ?, reorder_level = ?
        WHERE id = ?`,
       [
         category_id || null,
@@ -145,6 +206,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         sku.trim(),
         name.trim(),
         description || null,
+        image_url?.trim() || null,
         quantity,
         unit_price,
         reorder_level,

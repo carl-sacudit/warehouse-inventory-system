@@ -3,6 +3,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import pool from "./config/database.js";
 import productRoutes from "./routes/product.routes.js";
@@ -11,6 +13,10 @@ import stockMovementRoutes from "./routes/stockMovement.routes.js";
 import supplierRoutes from "./routes/supplier.routes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrder.routes.js";
 const app = express();
+const uploadDirectory = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../uploads"
+);
 
 const CLIENT_URL =
   process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -24,6 +30,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+app.use("/uploads", express.static(uploadDirectory));
 app.use("/api/stock-movements", stockMovementRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);

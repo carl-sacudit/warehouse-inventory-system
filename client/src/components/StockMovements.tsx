@@ -19,6 +19,7 @@ import {
   type MovementType,
   type StockMovement,
 } from "../services/stockMovementService";
+import ProductThumbnail from "./ProductThumbnail.tsx";
 
 import "./StockMovements.css";
 
@@ -27,6 +28,7 @@ interface ProductOption {
   name: string;
   sku: string;
   quantity: number;
+  image_url?: string | null;
 }
 
 interface ProductsResponse {
@@ -440,16 +442,20 @@ export default function StockMovements({
           </div>
 
           {selectedProduct && (
-            <p className="sm-available-stock">
-              Current available stock:{" "}
-              <strong>{selectedProduct.quantity}</strong>
-              {movementType === "OUT" && (
+            <div className="sm-selected-product">
+              <ProductThumbnail
+                imageUrl={selectedProduct.image_url}
+                className="sm-product-thumb"
+              />
+              <p className="sm-available-stock">
+                <strong>{selectedProduct.name}</strong>
                 <span>
-                  {" "}
-                  · Maximum quantity: {selectedProduct.quantity}
+                  Current available stock: {selectedProduct.quantity}
+                  {movementType === "OUT" &&
+                    ` · Maximum quantity: ${selectedProduct.quantity}`}
                 </span>
-              )}
-            </p>
+              </p>
+            </div>
           )}
 
           <div className="sm-form-footer">
@@ -579,7 +585,17 @@ export default function StockMovements({
                 paginatedMovements.map((movement) => (
                   <tr key={movement.id}>
                     <td className="sm-product-name">
-                      {movement.product_name}
+                      <div className="sm-product-cell">
+                        <ProductThumbnail
+                          imageUrl={
+                            products.find(
+                              (product) => product.id === movement.product_id
+                            )?.image_url
+                          }
+                          className="sm-product-thumb"
+                        />
+                        <span>{movement.product_name}</span>
+                      </div>
                     </td>
                     <td>{movement.sku}</td>
                     <td>

@@ -6,7 +6,7 @@ import {
   Trash2,
   ArrowUpDown,
 } from "lucide-react";
-import type { Product } from "../services/productService";
+import { getProductImageUrl, type Product } from "../services/productService";
 
 interface ProductsTableProps {
   products: Product[];
@@ -102,6 +102,7 @@ function ProductsTable({
               <th>Product</th>
               <th>SKU</th>
               <th>Category</th>
+              <th>Supplier / Source</th>
               <th>Quantity</th>
               <th>Unit Price</th>
               <th>Status</th>
@@ -141,6 +142,16 @@ function ProductsTable({
                       <div className="product-name-cell">
                         <div className="product-avatar">
                           <Package size={19} />
+                          {product.image_url && (
+                            <img
+                              src={getProductImageUrl(product.image_url)}
+                              alt=""
+                              loading="lazy"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
+                            />
+                          )}
                         </div>
 
                         <div className="product-name-info">
@@ -162,6 +173,12 @@ function ProductsTable({
                     <td>
                       <span className="product-category">
                         {product.category_name || "Uncategorized"}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="product-category">
+                        {product.supplier_name || "Unassigned"}
                       </span>
                     </td>
 

@@ -814,6 +814,44 @@
   font-size: 0.875rem;
 }
 
+.po-product-choice,
+.po-receive-item-product {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.po-product-choice > div,
+.po-receive-item-product > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.po-product-choice strong,
+.po-receive-item-product strong {
+  overflow: hidden;
+  color: var(--text-primary, #101828);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.po-product-choice small,
+.po-receive-item-product small {
+  color: var(--text-secondary, #667085);
+  font-size: 0.75rem;
+}
+
+.product-thumbnail.po-product-thumb {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 7px;
+}
+
 .po-remove-item {
   display: inline-flex;
   align-items: center;

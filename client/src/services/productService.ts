@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:5001/api/products";
+const API_BASE_URL = "http://localhost:5001";
+const API_URL = `${API_BASE_URL}/api/products`;
 
 export interface Product {
   id: number;
@@ -7,6 +8,7 @@ export interface Product {
   sku: string;
   name: string;
   description: string | null;
+  image_url?: string | null;
   quantity: number;
   unit_price: number | string;
   reorder_level: number;
@@ -16,12 +18,18 @@ export interface Product {
   updated_at?: string;
 }
 
+export interface ProductCategory {
+  id: number;
+  name: string;
+}
+
 export interface ProductInput {
   category_id?: number | null;
   supplier_id?: number | null;
   sku: string;
   name: string;
   description?: string;
+  image_url?: string | null;
   quantity: number;
   unit_price: number;
   reorder_level: number;
@@ -57,8 +65,37 @@ const response = await fetch(url, {
   return result as ApiResponse<T>;
 }
 
+export function getProductImageUrl(imageUrl: string): string {
+  return imageUrl.startsWith("http")
+    ? imageUrl
+    : `${API_BASE_URL}${imageUrl}`;
+}
+
+export async function uploadProductImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await fetch(`${API_URL}/upload`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const result = await response.json() as ApiResponse<{ image_url: string }>;
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Unable to upload product image.");
+  }
+
+  return result.data.image_url;
+}
+
 export async function getProducts(): Promise<Product[]> {
   const result = await request<Product[]>(API_URL);
+  return result.data;
+}
+
+export async function getProductCategories(): Promise<ProductCategory[]> {
+  const result = await request<ProductCategory[]>(`${API_URL}/categories`);
   return result.data;
 }
 
